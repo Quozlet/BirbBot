@@ -17,7 +17,11 @@ func main() {
 	defer func() {
 		// If a session is established, close it properly before exiting
 		if session != nil {
-			session.Close()
+			sessionErr := session.Close()
+			if sessionErr != nil {
+				log.Fatal(sessionErr)
+				return
+			}
 		}
 	}()
 	if err != nil {
@@ -28,6 +32,6 @@ func main() {
 	log.Println("Successful startup! Kill the process to stop the bot")
 
 	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sig
 }

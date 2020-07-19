@@ -36,7 +36,7 @@ func (w Weather) ProcessMessage(message ...string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("%s: %s", strings.Title(strings.Join(message[1:], " ")), strings.Split(string(body), ":")[1]), nil
+		return fmt.Sprintf("%s: %s", strings.Title(strings.Join(message[1:], " ")), strings.Split(body, ":")[1]), nil
 	}
 	url, err := createWeatherURL(message)
 	if err != nil {
@@ -82,6 +82,9 @@ func (f Forecast) ProcessMessage(message ...string) (string, error) {
 		start += 2 * weatherWidth
 		end += 2 * weatherWidth
 		url, err = createWeatherURL(message[1:])
+	}
+	if err != nil {
+		return "", err
 	}
 	return detailedWeather(url, start, end)
 }

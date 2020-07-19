@@ -22,7 +22,7 @@ func (d Dog) Check() error {
 
 // ProcessMessage for a Dog Command (will return the URL for a random dog (specifically shibe) image)
 func (d Dog) ProcessMessage(...string) (string, error) {
-	return fetchAnimal("https://shibe.online/api/shibes")
+	return fetchAnimal(dogURL)
 }
 
 // CommandList returns applicable aliases for Dog Command
@@ -40,13 +40,13 @@ type Cat struct{}
 
 // Check if the cat URL is valid
 func (c Cat) Check() error {
-	_, err := url.Parse("https://shibe.online/api/cats")
+	_, err := url.Parse(catURL)
 	return err
 }
 
 // ProcessMessage for a Cat Command (will return the URL for a random cat image)
 func (c Cat) ProcessMessage(...string) (string, error) {
-	return fetchAnimal("https://shibe.online/api/cats")
+	return fetchAnimal(catURL)
 }
 
 // CommandList returns applicable aliases for Cat Command
@@ -64,13 +64,13 @@ type Bird struct{}
 
 // Check if the bird URL is valid
 func (b Bird) Check() error {
-	_, err := url.Parse("https://shibe.online/api/birds")
+	_, err := url.Parse(birdURL)
 	return err
 }
 
 // ProcessMessage for a Bird Command (will return the URL for a random bird image)
 func (b Bird) ProcessMessage(...string) (string, error) {
-	return fetchAnimal("https://shibe.online/api/birds")
+	return fetchAnimal(birdURL)
 }
 
 // CommandList returns applicable alises for the Bird Command
@@ -85,6 +85,8 @@ func (b Bird) Help() string {
 
 func fetchAnimal(url string) (string, error) {
 	log.Printf("Fetching animal from %s", url)
+	// This can be statically proven to resolve to a const string
+	/* #nosec */
 	resp, err := http.Get(url)
 	if err != nil {
 		return "", err

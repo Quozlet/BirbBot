@@ -19,13 +19,13 @@ For the `!fortune` and `!cowsay` commands, [`fortune`](https://www.ibiblio.org/p
 
 To run in one step
 
-```
+```bash
 DISCORD_SECRET=AbC_123! go run main.go
 ```
 
 Alternatively, to build an executable binary and run
 
-```
+```bash
 go build .
 DISCORD_SECRET=AbC_123! ./birbbot
 ```
@@ -38,7 +38,7 @@ DISCORD_SECRET=AbC_123! ./birbbot
 
 To format: `go fmt`
 
-To [vet](): `go vet`
+To vet: `go vet`
 
 To lint: [`golint`](https://github.com/golang/lint)
 
@@ -54,11 +54,9 @@ To run the Docker image (assuming a `.env` file exists in the form of the `.env.
 
 ## Built With
 
-* [DiscordGo](https://github.com/bwmarrin/discordgo) - Go bindings for Discord 
-* [gofeed](https://github.com/mmcdole/gofeed) - Parse RSS and Atom feeds in Go 
+* [DiscordGo](https://github.com/bwmarrin/discordgo) - Go bindings for Discord
+* [gofeed](https://github.com/mmcdole/gofeed) - Parse RSS and Atom feeds in Go
 
 ## License
 
 Licensed under the [Open Software License 3.0](https://spdx.org/licenses/OSL-3.0.html).
-
-

@@ -7,20 +7,31 @@ import (
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
+	"quozlet.net/birbbot/app/commands"
 )
 
-var bot *Bot
+// Command is an interface that must be implemented for commands
+type Command interface {
+	// Check asserts all preconditions are met, and returns an error if they are not
+	Check() error
+	// ProcessMessage processes all additional arguments to the command (split on whitespace)
+	ProcessMessage(...string) (string, error)
+	// CommandList returns all aliases for the given command (must return at least one)
+	CommandList() []string
+	// Help returns the help message for the command
+	Help() string
+}
 
 // Start a Discord session for a given token
 func Start(secret string) (*discordgo.Session, error) {
 	if len(secret) == 0 {
 		return nil, errors.New("Not attempting connection, secret seems incorrect")
 	}
-	bot = makeBot()
-	session, err := discordgo.New("Bot " + secret)
-	if err != nil {
+	commandMap, commandList := discoverCommand()
+	session, sessionError := discordgo.New("Bot " + secret)
+	if sessionError != nil {
 		log.Println("Unable to create Discord session")
-		return nil, err
+		return nil, sessionError
 	}
 	log.Println("Successfully created Discord session")
 	// TODO: If panicking while processing a command, error instead of crashing
@@ -30,46 +41,91 @@ func Start(secret string) (*discordgo.Session, error) {
 			return
 		}
 		content := strings.Fields(strings.ToLower(m.Content))
-		cmd := bot.Commands[content[0]]
-		// If command exists
-		if cmd != nil {
-			log.Printf("Preparing to respond to %s", m.Content)
-			response, err := (*cmd).ProcessMessage(content[1:]...)
-			if err != nil {
-				log.Printf("An error occurred processing %s: %s", content, err.Error())
-				s.ChannelMessageSend(m.ChannelID, err.Error())
-			} else {
+		cmd := commandMap[content[0]]
+		log.Printf("Ack: %s", m.Content)
+		_, discordMsgErr := s.ChannelMessageSend(m.ChannelID, func() string {
+			if cmd != nil {
+				response, err := (*cmd).ProcessMessage(content[1:]...)
+				if err != nil {
+					log.Printf("An error occurred processing %s: %s", content, err.Error())
+					return err.Error()
+				}
 				log.Printf("Responded ok to %s", m.Content)
-				s.ChannelMessageSend(m.ChannelID, response)
+				return response
+
 			}
-		} else {
 			// Handle '!help', '!license', '!source'
 			switch content[0] {
 			case "!help":
-				if len(content[1:]) == 0 || bot.Commands["!"+content[1]] == nil {
-					s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Available commands:\n`%s`,`!license`,`!source`\n\n(For more information type asking for `!help <command name>`)", strings.Join(bot.CommandList, "`,`")))
-				} else {
-					s.ChannelMessageSend(m.ChannelID, (*bot.Commands["!"+content[1]]).Help())
+				if len(content[1:]) == 0 || commandMap["!"+content[1]] == nil {
+					return fmt.Sprintf("Available commands:\n`%s`,`!license`,`!source`\n\n(For more information type asking for `!help <command name>`)", strings.Join(commandList, "`,`"))
 				}
+				return (*commandMap["!"+content[1]]).Help()
 
 			case "!license":
-				s.ChannelMessageSend(m.ChannelID, "https://spdx.org/licenses/OSL-3.0.html")
+				return "https://spdx.org/licenses/OSL-3.0.html"
 
 			case "!source":
-				s.ChannelMessageSend(m.ChannelID, "https://github.com/Quozlet/BirbBot")
+				return "https://github.com/Quozlet/BirbBot"
 
 			default:
 				log.Printf("Unrecognized command: %s", m.Content)
-				s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Unrecognized command: `%s`", content[0]))
+				return fmt.Sprintf("Unrecognized command: `%s`", content[0])
 			}
+
+		}())
+		if discordMsgErr != nil {
+			log.Printf("Failed to respond: %s", discordMsgErr)
 		}
 
 	})
-	err = session.Open()
-	if err != nil {
+	sessionError = session.Open()
+	if sessionError != nil {
 		log.Println("Failed to open WebSocket connection to Discord servers")
-		return nil, err
+		return nil, sessionError
 	}
 	log.Println("Opened WebSocket connection to Discord")
 	return session, nil
+}
+
+// TODO: Automatically populate commands (requires some AST parser black magic)
+// In the meantime newly added commands must implement all methods in the Command interface and be added to the list
+func discoverCommand() (map[string]*Command, []string) {
+	commandMap := make(map[string]*Command)
+	for _, cmd := range []interface{}{
+		commands.EightBall{},
+		commands.Bird{},
+		commands.Cat{},
+		commands.Dog{},
+		commands.Choose{},
+		commands.Cowsay{},
+		commands.Fortune{},
+		commands.FortuneCookie{},
+		commands.RSS{},
+		commands.Weather{},
+		commands.Forecast{},
+	} {
+		command, ok := cmd.(Command)
+		if ok {
+			err := command.Check()
+			if err != nil {
+				log.Println(err)
+			} else {
+				for _, alias := range command.CommandList() {
+					if strings.HasPrefix(alias, "!") {
+						commandMap[alias] = &command
+					} else {
+						log.Printf("Not registering %s (doesn't start with '!'", alias)
+					}
+				}
+			}
+		}
+	}
+	keys, i := make([]string, len(commandMap)), 0
+	for key := range commandMap {
+		keys[i] = key
+		i++
+	}
+	log.Printf("Registered commands: %s", strings.Join(keys, ", "))
+	return commandMap, keys
 }

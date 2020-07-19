@@ -1,6 +1,9 @@
 package commands
 
-import "errors"
+import (
+	"errors"
+	"math/rand"
+)
 
 var eightBallMessages = []string{"It is certain",
 	"It is decidedly so", "Without a doubt", "Yes definitely",
@@ -22,10 +25,10 @@ func (e EightBall) Check() error {
 
 // ProcessMessage will return an error if no arguments are provided, otherwise a random message is chosen
 func (e EightBall) ProcessMessage(msg ...string) (string, error) {
-	if len(msg) != 0 {
-		return Choose{}.ProcessMessage(eightBallMessages...)
+	if len(msg) == 0 {
+		return "", errors.New("You didn't give me anything to respond to")
 	}
-	return "", errors.New("You didn't give me anything to respond to")
+	return eightBallMessages[rand.Intn(len(eightBallMessages))], nil
 }
 
 // CommandList returns the invocable aliases for the 8 Ball Command
