@@ -157,11 +157,12 @@ func (f Forecast) ProcessMessage(message ...string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if message[0] == "tomorrow" {
+	switch message[0] {
+	case "tomorrow":
 		start += weatherWidth
 		end += weatherWidth
 		url, err = createWeatherURL(message[1:])
-	} else if message[0] == "last" {
+	case "last":
 		start += 2 * weatherWidth
 		end += 2 * weatherWidth
 		url, err = createWeatherURL(message[1:])
@@ -239,10 +240,9 @@ func dataWeather(url *url.URL) (*weatherReport, error) {
 		return nil, err
 	}
 	report := weatherReport{}
-	unmarshallErr := json.NewDecoder(response.Body).Decode(&report)
 	defer response.Body.Close()
-	if unmarshallErr != nil {
-		return nil, unmarshallErr
+	if err := json.NewDecoder(response.Body).Decode(&report); err != nil {
+		return nil, err
 	}
 	return &report, nil
 }

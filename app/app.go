@@ -28,10 +28,10 @@ func Start(secret string) (*discordgo.Session, error) {
 		return nil, errors.New("Not attempting connection, secret seems incorrect")
 	}
 	commandMap, commandList := discoverCommand()
-	session, sessionError := discordgo.New("Bot " + secret)
-	if sessionError != nil {
+	session, err := discordgo.New("Bot " + secret)
+	if err != nil {
 		log.Println("Unable to create Discord session")
-		return nil, sessionError
+		return nil, err
 	}
 	log.Println("Successfully created Discord session")
 	// TODO: If panicking while processing a command, error instead of crashing
@@ -42,10 +42,9 @@ func Start(secret string) (*discordgo.Session, error) {
 		}
 		commandHandler(s, m, commandMap, commandList)
 	})
-	sessionError = session.Open()
-	if sessionError != nil {
+	if err = session.Open(); err != nil {
 		log.Println("Failed to open WebSocket connection to Discord servers")
-		return nil, sessionError
+		return nil, err
 	}
 	log.Println("Opened WebSocket connection to Discord")
 	return session, nil
@@ -55,30 +54,26 @@ func commandHandler(s *discordgo.Session, m *discordgo.MessageCreate, commandMap
 	content := strings.Fields(strings.ToLower(m.Content))
 	cmd := commandMap[content[0]]
 	log.Printf("Ack: %s", m.Content)
-	_, discordMsgErr := s.ChannelMessageSend(m.ChannelID, func() string {
+	_, err := s.ChannelMessageSend(m.ChannelID, func() string {
 		if cmd != nil {
-			reactionErr := s.MessageReactionAdd(m.ChannelID, m.Message.ID, "✅")
-			if reactionErr != nil {
-				log.Println(reactionErr)
+			if err := s.MessageReactionAdd(m.ChannelID, m.Message.ID, "✅"); err != nil {
+				log.Println(err)
 			}
 			defer func() {
-				reactionErr := s.MessageReactionRemove(m.ChannelID, m.Message.ID, "✅", s.State.User.ID)
-				if reactionErr != nil {
-					log.Println(reactionErr)
-				}
-			}()
-			response, err := (*cmd).ProcessMessage(content[1:]...)
-			if err != nil {
-				log.Printf("An error occurred processing %s: %s", content, err.Error())
-				reactionErr := s.MessageReactionRemove(m.ChannelID, m.Message.ID, "✅", s.State.User.ID)
-				if reactionErr != nil {
+				if err := s.MessageReactionRemove(m.ChannelID, m.Message.ID, "✅", s.State.User.ID); err != nil {
 					log.Println(err)
 				}
-				failureReactionErr := s.MessageReactionAdd(m.ChannelID, m.Message.ID, "❗")
-				if failureReactionErr != nil {
-					log.Println(failureReactionErr)
+			}()
+			response, msgError := (*cmd).ProcessMessage(content[1:]...)
+			if msgError != nil {
+				log.Printf("An error occurred processing %s: %s", content, msgError.Error())
+				if err := s.MessageReactionRemove(m.ChannelID, m.Message.ID, "✅", s.State.User.ID); err != nil {
+					log.Println(err)
 				}
-				return err.Error()
+				if err := s.MessageReactionAdd(m.ChannelID, m.Message.ID, "❗"); err != nil {
+					log.Println(err)
+				}
+				return msgError.Error()
 			}
 			log.Printf("Responded ok to %s", m.Content)
 			return response
@@ -104,8 +99,8 @@ func commandHandler(s *discordgo.Session, m *discordgo.MessageCreate, commandMap
 		}
 
 	}())
-	if discordMsgErr != nil {
-		log.Printf("Failed to respond: %s", discordMsgErr)
+	if err != nil {
+		log.Printf("Failed to respond: %s", err)
 	}
 
 }
@@ -129,8 +124,7 @@ func discoverCommand() (map[string]*Command, []string) {
 	} {
 		command, ok := cmd.(Command)
 		if ok {
-			err := command.Check()
-			if err != nil {
+			if err := command.Check(); err != nil {
 				log.Println(err)
 			} else {
 				for _, alias := range command.CommandList() {

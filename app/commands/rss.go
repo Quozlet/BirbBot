@@ -35,8 +35,11 @@ func (r RSS) ProcessMessage(message ...string) (string, error) {
 	}
 	url.Scheme = "https"
 	feed, err := fp.ParseURLWithContext(url.String(), ctx)
-	if feed == nil || err != nil {
+	if err != nil {
 		return "", err
+	}
+	if feed == nil {
+		return "", fmt.Errorf("Could not fetch an RSS feed for %s", url.String())
 	}
 	rssFeed := fmt.Sprintf("Fetched **%s** (%s)", feed.Title, feed.Description)
 	if len(feed.Items) != 0 {

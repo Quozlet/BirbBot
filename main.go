@@ -17,8 +17,7 @@ func main() {
 	defer func() {
 		// If a session is established, close it properly before exiting
 		if session != nil {
-			sessionErr := session.Close()
-			if sessionErr != nil {
+			if sessionErr := session.Close(); sessionErr != nil {
 				log.Fatal(sessionErr)
 				return
 			}
