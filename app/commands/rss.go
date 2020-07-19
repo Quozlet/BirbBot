@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/k3a/html2text"
 	"github.com/mmcdole/gofeed"
 )
 
@@ -43,7 +44,7 @@ func (r RSS) ProcessMessage(message ...string) (string, error) {
 	if feed == nil {
 		return "", fmt.Errorf("Could not fetch an RSS feed for %s", url.String())
 	}
-	rssFeed := fmt.Sprintf("Fetched **%s** (%s)", feed.Title, feed.Description)
+	rssFeed := fmt.Sprintf("Fetched **%s** (%s)", html2text.HTML2Text(feed.Title), html2text.HTML2Text(feed.Description))
 	if len(feed.Items) != 0 {
 		firstItem := feed.Items[0]
 		secondary := firstItem.Link
@@ -51,10 +52,10 @@ func (r RSS) ProcessMessage(message ...string) (string, error) {
 			if len(firstItem.Enclosures) != 0 {
 				secondary = firstItem.Enclosures[0].URL
 			} else {
-				secondary = firstItem.Description
+				secondary = html2text.HTML2Text(firstItem.Description)
 			}
 		}
-		rssFeed = fmt.Sprintf("%s\n\nLatest item\n**%s**\n%s", rssFeed, firstItem.Title, secondary)
+		rssFeed = fmt.Sprintf("%s\n\nLatest item\n**%s**\n%s", rssFeed, html2text.HTML2Text(firstItem.Title), secondary)
 	}
 	return rssFeed, nil
 }
