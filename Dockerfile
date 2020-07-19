@@ -7,5 +7,5 @@ RUN addgroup -g 1000 birbbot \
 WORKDIR /home/birbbot
 USER birbbot
 COPY . .
-RUN go build .
+RUN go mod download && go build .
 CMD ./birbbot

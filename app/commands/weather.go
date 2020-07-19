@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -8,6 +9,47 @@ import (
 	"net/url"
 	"strings"
 )
+
+type weatherReport struct {
+	CurrentCondition []currentCondition `json:"current_condition"`
+	Weather          []dailyWeather     `json:"weather"`
+	NearestArea      []area             `json:"nearest_area"`
+}
+
+type currentCondition struct {
+	FeelsLikeC     int           `json:"FeelsLikeC,string"`
+	FeelsLikeF     int           `json:"FeelsLikeF,string"`
+	Humidity       int           `json:"humidity,string"`
+	WeatherDesc    []valueHolder `json:"weatherDesc"`
+	Winddir16Point string        `json:"winddir16Point"`
+	WindspeedKmph  int           `json:"windspeedKmph,string"`
+	WindspeedMiles int           `json:"windspeedMiles,string"`
+	TempC          int           `json:"temp_C,string"`
+	TempF          int           `json:"temp_F,string"`
+}
+
+type valueHolder struct {
+	Value string `json:"Value"`
+}
+
+type dailyWeather struct {
+	MaxTempC int      `json:"maxtempC,string"`
+	MaxTempF int      `json:"maxtempF,string"`
+	MinTempC int      `json:"mintempC,string"`
+	MinTempF int      `json:"mintempF,string"`
+	Hourly   []hourly `json:"hourly"`
+}
+
+type hourly struct {
+	ChanceOfRain int `json:"chanceofrain,string"`
+	ChanceOfSnow int `json:"chanceofsnow,string"`
+}
+
+type area struct {
+	AreaName []valueHolder `json:"areaName"`
+	Country  []valueHolder `json:"country"`
+	Region   []valueHolder `json:"region"`
+}
 
 const weatherURL = "https://wttr.in"
 
@@ -24,27 +66,68 @@ func (w Weather) Check() error {
 
 // ProcessMessage processes a given message and fetches the weather for the location specified in the format specified
 func (w Weather) ProcessMessage(message ...string) (string, error) {
-	if len(message) != 0 && message[0] == "simple" {
-		url, err := createWeatherURL(message[1:])
-		if err != nil {
-			return "", err
-		}
-		q := url.Query()
-		q.Set("format", "4")
-		url.RawQuery = q.Encode()
-		body, err := weatherResponse(url)
-		if err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("%s: %s", strings.Title(strings.Join(message[1:], " ")), strings.Split(body, ":")[1]), nil
-	}
-	url, err := createWeatherURL(message)
-	if err != nil {
-		return "", err
-	}
-	// Current forecast (lines 1-7)
-	return detailedWeather(url, 1, 7)
+	if len(message) != 0 {
+		switch message[0] {
+		case "simple":
+			url, err := createWeatherURL(message[1:])
+			q := url.Query()
+			if err != nil {
+				return "", err
+			}
+			q.Set("format", "4")
+			url.RawQuery = q.Encode()
+			body, err := weatherResponse(url)
+			if err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("%s: %s", strings.Title(strings.Join(message[1:], " ")), strings.Split(body, ":")[1]), nil
+		case "classic":
+			url, err := createWeatherURL(message[1:])
+			q := url.Query()
+			if err != nil {
+				return "", err
+			}
+			q.Set("format", "j1")
+			url.RawQuery = q.Encode()
+			body, err := dataWeather(url)
+			if err != nil {
+				return "", err
+			}
+			var precip string
+			if body.Weather[0].Hourly[0].ChanceOfRain < body.Weather[0].Hourly[0].ChanceOfSnow {
+				precip = fmt.Sprintf("%d%% chance of snow", body.Weather[0].Hourly[0].ChanceOfSnow)
+			} else {
+				precip = fmt.Sprintf("%d%% chance of rain", body.Weather[0].Hourly[0].ChanceOfRain)
+			}
+			return fmt.Sprintf("%s, %dºF (%dºC) / feels like %dºF (%dºC) | High: %dºF (%dºC) | Low %dºF (%dºC) | Humidity: %d%% | Wind: %s @ %dmph (%dkm/h) | %s (%s, %s, %s)",
+				body.CurrentCondition[0].WeatherDesc[0].Value,
+				body.CurrentCondition[0].TempF,
+				body.CurrentCondition[0].TempC,
+				body.CurrentCondition[0].FeelsLikeF,
+				body.CurrentCondition[0].FeelsLikeC,
+				body.Weather[0].MaxTempF,
+				body.Weather[0].MaxTempC,
+				body.Weather[0].MinTempF,
+				body.Weather[0].MinTempC,
+				body.CurrentCondition[0].Humidity,
+				body.CurrentCondition[0].Winddir16Point,
+				body.CurrentCondition[0].WindspeedMiles,
+				body.CurrentCondition[0].WindspeedKmph,
+				precip,
+				body.NearestArea[0].AreaName[0].Value,
+				body.NearestArea[0].Region[0].Value,
+				body.NearestArea[0].Country[0].Value), nil
 
+		default:
+			url, err := createWeatherURL(message)
+			if err != nil {
+				return "", err
+			}
+			// Current forecast (lines 1-7)
+			return detailedWeather(url, 1, 7)
+		}
+	}
+	return "", errors.New("Provide a location to get the weather for :)")
 }
 
 // CommandList returns a list of aliases for the Weather Command
@@ -141,4 +224,25 @@ func detailedWeather(url *url.URL, startLine int, endLine int) (string, error) {
 		return "", err
 	}
 	return fmt.Sprintf("```\n%s```", strings.Join(strings.Split(body, "\n")[startLine:endLine], "\n")), nil
+}
+
+func dataWeather(url *url.URL) (*weatherReport, error) {
+	client := &http.Client{}
+	request, err := http.NewRequest("GET", url.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	// Force website to send back just text
+	request.Header.Set("User-Agent", "curl")
+	response, err := client.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	report := weatherReport{}
+	unmarshallErr := json.NewDecoder(response.Body).Decode(&report)
+	defer response.Body.Close()
+	if unmarshallErr != nil {
+		return nil, unmarshallErr
+	}
+	return &report, nil
 }
