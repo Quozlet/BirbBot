@@ -24,7 +24,9 @@ func (r RSS) Check() error {
 // ProcessMessage attempts to parse the first argument as a URL to an RSS feed, then fetch the first argument. If any step fails, an error is returned
 func (r RSS) ProcessMessage(message ...string) (string, error) {
 	if len(message) == 0 {
-		return "", errors.New("Sure, let me test if that's valid.\nHere comes the feed: _You are a horrible person_. I'm serious, that's what's in the feed: _\"A horrible person\"_. We weren't even testing for that")
+		return "", errors.New("Sure, let me test if that's valid.\n" +
+			"Here comes the feed: _You are a horrible person_. " +
+			"I'm serious, that's what's in the feed: _\"A horrible person\"_. We weren't even testing for that")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()

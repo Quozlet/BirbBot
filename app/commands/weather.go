@@ -180,7 +180,8 @@ func (f Forecast) CommandList() []string {
 
 // Help returns the help message for the Forecase Command
 func (f Forecast) Help() string {
-	return "Provides today's forecast for a location (use `!forecast tomorrow`/`!forecast last` to get tomorrow and the day after's forecast, respectively)"
+	return "Provides today's forecast for a location " +
+		"(use `!forecast tomorrow`/`!forecast last` to get tomorrow and the day after's forecast, respectively)"
 }
 
 func createWeatherURL(location []string) (*url.URL, error) {

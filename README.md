@@ -18,6 +18,8 @@ To install `fortune` or `cowsay`, use:
 * macOS: [Homebrew](https://brew.sh/)
 * Windows: [Scoop](https://scoop.sh/)
 
+Consider copying [`pre-commit`](pre-commit) as a [Git hook](https://git-scm.com/docs/githooks): `cp pre-commit .git/hooks/pre-commit`.
+
 #### Developing with Docker
 
 You must rebuild Docker each time, otherwise all dependencies are taken care of.

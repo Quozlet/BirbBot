@@ -16,7 +16,9 @@ func (c Choose) Check() error {
 // ProcessMessage processes a set of options to pick from, selecting one at random or returning an error if none are provided
 func (c Choose) ProcessMessage(message ...string) (string, error) {
 	if len(message) == 0 {
-		return "", errors.New("Choices, choices. Do I choose the nothing you provided, or the nothing I'm going to provide in return? _Hint_: Give me something to pick smarty pants")
+		return "", errors.New("Choices, choices. " +
+			"Do I choose the nothing you provided, or the nothing I'm going to provide in return? " +
+			"_Hint_: Give me something to pick smarty pants")
 	}
 	return message[rand.Intn(len(message))], nil
 }

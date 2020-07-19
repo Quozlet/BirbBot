@@ -4,9 +4,7 @@
 <!-- Detailed explanation -->
 
 
-- [ ] Ran `go fmt`
-- [ ] Ran `go vet`
-- [ ] Ran `golint`
+- [ ] Ran `pre-commit`
 - [ ] Tested
 
 <!-- Does this close an issue? If so reference the issue -->

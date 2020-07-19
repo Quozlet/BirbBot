@@ -83,7 +83,10 @@ func commandHandler(s *discordgo.Session, m *discordgo.MessageCreate, commandMap
 		switch content[0] {
 		case "!help":
 			if len(content[1:]) == 0 || commandMap["!"+content[1]] == nil {
-				return fmt.Sprintf("Available commands:\n`%s`, `!license` (the software license that applies to this bot's source code), `!source` (a link to this bot's source code)\n\n(For more information type asking for `!help <command name>`)", strings.Join(commandList, "`, `"))
+				return fmt.Sprintf("Available commands:\n`%s`,"+
+					" `!license` (the software license that applies to this bot's source code),"+
+					" `!source` (a link to this bot's source code)\n\n"+
+					"(For more information type asking for `!help <command name>`)", strings.Join(commandList, "`, `"))
 			}
 			return (*commandMap["!"+content[1]]).Help()
 
