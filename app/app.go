@@ -40,44 +40,7 @@ func Start(secret string) (*discordgo.Session, error) {
 		if m.Author.ID == s.State.User.ID || !strings.HasPrefix(m.Content, "!") {
 			return
 		}
-		content := strings.Fields(strings.ToLower(m.Content))
-		cmd := commandMap[content[0]]
-		log.Printf("Ack: %s", m.Content)
-		_, discordMsgErr := s.ChannelMessageSend(m.ChannelID, func() string {
-			if cmd != nil {
-				response, err := (*cmd).ProcessMessage(content[1:]...)
-				if err != nil {
-					log.Printf("An error occurred processing %s: %s", content, err.Error())
-					return err.Error()
-				}
-				log.Printf("Responded ok to %s", m.Content)
-				return response
-
-			}
-			// Handle '!help', '!license', '!source'
-			switch content[0] {
-			case "!help":
-				if len(content[1:]) == 0 || commandMap["!"+content[1]] == nil {
-					return fmt.Sprintf("Available commands:\n`%s`,`!license`,`!source`\n\n(For more information type asking for `!help <command name>`)", strings.Join(commandList, "`,`"))
-				}
-				return (*commandMap["!"+content[1]]).Help()
-
-			case "!license":
-				return "https://spdx.org/licenses/OSL-3.0.html"
-
-			case "!source":
-				return "https://github.com/Quozlet/BirbBot"
-
-			default:
-				log.Printf("Unrecognized command: %s", m.Content)
-				return fmt.Sprintf("Unrecognized command: `%s`", content[0])
-			}
-
-		}())
-		if discordMsgErr != nil {
-			log.Printf("Failed to respond: %s", discordMsgErr)
-		}
-
+		commandHandler(s, m, commandMap, commandList)
 	})
 	sessionError = session.Open()
 	if sessionError != nil {
@@ -86,6 +49,65 @@ func Start(secret string) (*discordgo.Session, error) {
 	}
 	log.Println("Opened WebSocket connection to Discord")
 	return session, nil
+}
+
+func commandHandler(s *discordgo.Session, m *discordgo.MessageCreate, commandMap map[string]*Command, commandList []string) {
+	content := strings.Fields(strings.ToLower(m.Content))
+	cmd := commandMap[content[0]]
+	log.Printf("Ack: %s", m.Content)
+	_, discordMsgErr := s.ChannelMessageSend(m.ChannelID, func() string {
+		if cmd != nil {
+			reactionErr := s.MessageReactionAdd(m.ChannelID, m.Message.ID, "✅")
+			if reactionErr != nil {
+				log.Println(reactionErr)
+			}
+			defer func() {
+				reactionErr := s.MessageReactionRemove(m.ChannelID, m.Message.ID, "✅", s.State.User.ID)
+				if reactionErr != nil {
+					log.Println(reactionErr)
+				}
+			}()
+			response, err := (*cmd).ProcessMessage(content[1:]...)
+			if err != nil {
+				log.Printf("An error occurred processing %s: %s", content, err.Error())
+				reactionErr := s.MessageReactionRemove(m.ChannelID, m.Message.ID, "✅", s.State.User.ID)
+				if reactionErr != nil {
+					log.Println(err)
+				}
+				failureReactionErr := s.MessageReactionAdd(m.ChannelID, m.Message.ID, "❗")
+				if failureReactionErr != nil {
+					log.Println(failureReactionErr)
+				}
+				return err.Error()
+			}
+			log.Printf("Responded ok to %s", m.Content)
+			return response
+
+		}
+		// Handle '!help', '!license', '!source'
+		switch content[0] {
+		case "!help":
+			if len(content[1:]) == 0 || commandMap["!"+content[1]] == nil {
+				return fmt.Sprintf("Available commands:\n`%s`, `!license` (the software license that applies to this bot's source code), `!source` (a link to this bot's source code)\n\n(For more information type asking for `!help <command name>`)", strings.Join(commandList, "`, `"))
+			}
+			return (*commandMap["!"+content[1]]).Help()
+
+		case "!license":
+			return "https://spdx.org/licenses/OSL-3.0.html"
+
+		case "!source":
+			return "https://github.com/Quozlet/BirbBot"
+
+		default:
+			log.Printf("Unrecognized command: %s", m.Content)
+			return fmt.Sprintf("Unrecognized command: `%s`", content[0])
+		}
+
+	}())
+	if discordMsgErr != nil {
+		log.Printf("Failed to respond: %s", discordMsgErr)
+	}
+
 }
 
 // TODO: Automatically populate commands (requires some AST parser black magic)
@@ -115,7 +137,7 @@ func discoverCommand() (map[string]*Command, []string) {
 					if strings.HasPrefix(alias, "!") {
 						commandMap[alias] = &command
 					} else {
-						log.Printf("Not registering %s (doesn't start with '!'", alias)
+						log.Printf("Not registering %s (doesn't start with '!')", alias)
 					}
 				}
 			}

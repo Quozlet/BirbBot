@@ -70,10 +70,10 @@ func (w Weather) ProcessMessage(message ...string) (string, error) {
 		switch message[0] {
 		case "simple":
 			url, err := createWeatherURL(message[1:])
-			q := url.Query()
 			if err != nil {
 				return "", err
 			}
+			q := url.Query()
 			q.Set("format", "4")
 			url.RawQuery = q.Encode()
 			body, err := weatherResponse(url)
@@ -83,10 +83,10 @@ func (w Weather) ProcessMessage(message ...string) (string, error) {
 			return fmt.Sprintf("%s: %s", strings.Title(strings.Join(message[1:], " ")), strings.Split(body, ":")[1]), nil
 		case "classic":
 			url, err := createWeatherURL(message[1:])
-			q := url.Query()
 			if err != nil {
 				return "", err
 			}
+			q := url.Query()
 			q.Set("format", "j1")
 			url.RawQuery = q.Encode()
 			body, err := dataWeather(url)
@@ -137,7 +137,7 @@ func (w Weather) CommandList() []string {
 
 // Help returns the help message for the Weather Command
 func (w Weather) Help() string {
-	return "Provides the current weather for a location (use `!w simple` for a one line response)"
+	return "Provides the current weather for a location (use `!w simple` for a one line response, and `!w classic` for a detailed text response)"
 }
 
 // Forecast is a Command to get the Forecast (today's, tomorrow's, or the day after's) for a given location
