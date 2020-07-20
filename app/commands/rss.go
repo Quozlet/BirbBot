@@ -17,14 +17,12 @@ import (
 	"github.com/mmcdole/gofeed"
 )
 
-// TODO: Save feeds in database
-
 // RSS is a command to fetch an RSS feed for validation
 type RSS struct{}
 
 // Check returns nil
 func (r RSS) Check() error {
-	return load()
+	return loadFeedDB()
 }
 
 // ProcessMessage attempts to parse the first argument as a URL to an RSS feed, then fetch the first argument. If any step fails, an error is returned
@@ -56,7 +54,7 @@ func (r RSS) ProcessMessage(m *discordgo.MessageCreate) (string, error) {
 		}
 		feed.Title = html2text.HTML2Text(feed.Title)
 		rssFeed := fmt.Sprintf("Fetched **%s** _(%s)_", feed.Title, html2text.HTML2Text(feed.Description))
-		if err := insertNewFeed(feed, url); err != nil {
+		if err := insertNewFeedDB(feed, url); err != nil {
 			return "", err
 		}
 		return rssFeed, nil
@@ -64,7 +62,7 @@ func (r RSS) ProcessMessage(m *discordgo.MessageCreate) (string, error) {
 }
 
 func handleList() (string, error) {
-	feeds, err := selectFeeds()
+	feeds, err := selectAllFeedDB()
 	if err != nil {
 		return "", err
 	}
@@ -86,7 +84,7 @@ func feedByID(args []string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	info, err := findByID(id)
+	info, err := selectFeedDB(id)
 	if err != nil {
 		return "", err
 	}
@@ -101,7 +99,7 @@ func handleLatest(args []string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	info, err := findByID(id)
+	info, err := selectFeedDB(id)
 	if err != nil {
 		return "", err
 	}
@@ -124,7 +122,7 @@ func handleLatest(args []string) (string, error) {
 	}
 	hash := sha.Sum(nil)
 	if fmt.Sprintf("%x", hash) != fmt.Sprintf("%x", info.LastItem) {
-		if err := fetchedLatest(hash, id); err != nil {
+		if err := updateLatestFeedDB(hash, id); err != nil {
 			return "", err
 		}
 		return fmt.Sprintf("%s: %s", info.Title, latest), nil
@@ -167,11 +165,11 @@ func refreshFeed(url *url.URL) (*gofeed.Feed, error) {
 
 // SQL Definitions/Helpers
 
-const tableDefinition string = "CREATE TABLE IF NOT EXISTS Feeds (ID INTEGER PRIMARY KEY AUTOINCREMENT, Title TEXT NOT NULL, URL TEXT UNIQUE NOT NULL, LastItemHash BLOB)"
-const newFeed string = "INSERT INTO Feeds(Title, URL, LastItemHash) values(?, ?, ?)"
+const feedTableDefinition string = "CREATE TABLE IF NOT EXISTS Feeds (ID INTEGER PRIMARY KEY AUTOINCREMENT, Title TEXT NOT NULL, URL TEXT UNIQUE NOT NULL, LastItemHash BLOB)"
+const feedNew string = "INSERT INTO Feeds(Title, URL, LastItemHash) values(?, ?, ?)"
 const feedList string = "SELECT ID, Title, URL, LastItemHash FROM Feeds"
-const fetchFeed string = "SELECT Title, URL, LastItemHash FROM Feeds WHERE ID = ?"
-const updateLatest string = "UPDATE Feeds SET LastItemHash = ? WHERE ID = ?"
+const feedSelect string = "SELECT Title, URL, LastItemHash FROM Feeds WHERE ID = ?"
+const feedUpdate string = "UPDATE Feeds SET LastItemHash = ? WHERE ID = ?"
 
 type feedInfo struct {
 	ID       int64
@@ -180,20 +178,20 @@ type feedInfo struct {
 	LastItem []byte
 }
 
-func load() error {
-	db, err := sql.Open("sqlite3", "./feeds.db")
+func loadFeedDB() error {
+	db, err := sql.Open("sqlite3", "./birbbot.db")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(tableDefinition)
+	_, err = db.Exec(feedTableDefinition)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func insertNewFeed(feed *gofeed.Feed, url *url.URL) error {
-	db, dbErr := sql.Open("sqlite3", "./feeds.db")
+func insertNewFeedDB(feed *gofeed.Feed, url *url.URL) error {
+	db, dbErr := sql.Open("sqlite3", "./birbbot.db")
 	if dbErr != nil {
 		return dbErr
 	}
@@ -206,7 +204,7 @@ func insertNewFeed(feed *gofeed.Feed, url *url.URL) error {
 	if txErr != nil {
 		return txErr
 	}
-	stmt, stmtErr := tx.Prepare(newFeed)
+	stmt, stmtErr := tx.Prepare(feedNew)
 	if stmtErr != nil {
 		return stmtErr
 	}
@@ -236,8 +234,8 @@ func insertNewFeed(feed *gofeed.Feed, url *url.URL) error {
 	return nil
 }
 
-func selectFeeds() ([]*feedInfo, error) {
-	db, dbErr := sql.Open("sqlite3", "./feeds.db")
+func selectAllFeedDB() ([]*feedInfo, error) {
+	db, dbErr := sql.Open("sqlite3", "./birbbot.db")
 	if dbErr != nil {
 		return nil, dbErr
 	}
@@ -277,8 +275,8 @@ func selectFeeds() ([]*feedInfo, error) {
 	return info, nil
 }
 
-func findByID(id int64) (*feedInfo, error) {
-	db, dbErr := sql.Open("sqlite3", "./feeds.db")
+func selectFeedDB(id int64) (*feedInfo, error) {
+	db, dbErr := sql.Open("sqlite3", "./birbbot.db")
 	if dbErr != nil {
 		return nil, dbErr
 	}
@@ -287,7 +285,7 @@ func findByID(id int64) (*feedInfo, error) {
 			log.Println(err)
 		}
 	}()
-	stmt, err := db.Prepare(fetchFeed)
+	stmt, err := db.Prepare(feedSelect)
 	if err != nil {
 		return nil, err
 	}
@@ -305,8 +303,8 @@ func findByID(id int64) (*feedInfo, error) {
 	return &feedInfo{ID: id, Title: title, URL: url, LastItem: lastItem}, nil
 }
 
-func fetchedLatest(hash []byte, id int64) error {
-	db, dbErr := sql.Open("sqlite3", "./feeds.db")
+func updateLatestFeedDB(hash []byte, id int64) error {
+	db, dbErr := sql.Open("sqlite3", "./birbbot.db")
 	if dbErr != nil {
 		return dbErr
 	}
@@ -319,7 +317,7 @@ func fetchedLatest(hash []byte, id int64) error {
 	if txError != nil {
 		return txError
 	}
-	stmt, stmtErr := tx.Prepare(updateLatest)
+	stmt, stmtErr := tx.Prepare(feedUpdate)
 	if stmtErr != nil {
 		return stmtErr
 	}

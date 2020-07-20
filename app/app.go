@@ -53,7 +53,7 @@ func Start(secret string) (*discordgo.Session, error) {
 func commandHandler(s *discordgo.Session, m *discordgo.MessageCreate, commandMap map[string]*Command, commandList []string) {
 	content := strings.Fields(strings.ToLower(m.Content))
 	cmd := commandMap[content[0]]
-	log.Printf("Ack: %s", m.Content)
+	log.Printf("Ack %s: %s", m.Author.Username, m.Content)
 	response := func() string {
 		if cmd != nil {
 			if err := s.MessageReactionAdd(m.ChannelID, m.Message.ID, "✅"); err != nil {
@@ -75,7 +75,7 @@ func commandHandler(s *discordgo.Session, m *discordgo.MessageCreate, commandMap
 				}
 				return msgError.Error()
 			}
-			log.Printf("Responded ok to %s", m.Content)
+			log.Printf("Responded ok to %s: %s", m.Author.Username, m.Content)
 			return response
 
 		}
