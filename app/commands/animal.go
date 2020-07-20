@@ -5,6 +5,8 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+
+	"github.com/bwmarrin/discordgo"
 )
 
 const dogURL = "https://shibe.online/api/shibes"
@@ -21,7 +23,7 @@ func (d Dog) Check() error {
 }
 
 // ProcessMessage for a Dog Command (will return the URL for a random dog (specifically shibe) image)
-func (d Dog) ProcessMessage(...string) (string, error) {
+func (d Dog) ProcessMessage(*discordgo.MessageCreate) (string, error) {
 	return fetchAnimal(dogURL)
 }
 
@@ -45,7 +47,7 @@ func (c Cat) Check() error {
 }
 
 // ProcessMessage for a Cat Command (will return the URL for a random cat image)
-func (c Cat) ProcessMessage(...string) (string, error) {
+func (c Cat) ProcessMessage(*discordgo.MessageCreate) (string, error) {
 	return fetchAnimal(catURL)
 }
 
@@ -69,7 +71,7 @@ func (b Bird) Check() error {
 }
 
 // ProcessMessage for a Bird Command (will return the URL for a random bird image)
-func (b Bird) ProcessMessage(...string) (string, error) {
+func (b Bird) ProcessMessage(*discordgo.MessageCreate) (string, error) {
 	return fetchAnimal(birdURL)
 }
 

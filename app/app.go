@@ -15,7 +15,7 @@ type Command interface {
 	// Check asserts all preconditions are met, and returns an error if they are not
 	Check() error
 	// ProcessMessage processes all additional arguments to the command (split on whitespace)
-	ProcessMessage(...string) (string, error)
+	ProcessMessage(m *discordgo.MessageCreate) (string, error)
 	// CommandList returns all aliases for the given command (must return at least one)
 	CommandList() []string
 	// Help returns the help message for the command
@@ -64,7 +64,7 @@ func commandHandler(s *discordgo.Session, m *discordgo.MessageCreate, commandMap
 					log.Println(err)
 				}
 			}()
-			response, msgError := (*cmd).ProcessMessage(content[1:]...)
+			response, msgError := (*cmd).ProcessMessage(m)
 			if msgError != nil {
 				log.Printf("An error occurred processing %s: %s", content, msgError.Error())
 				if err := s.MessageReactionRemove(m.ChannelID, m.Message.ID, "✅", s.State.User.ID); err != nil {

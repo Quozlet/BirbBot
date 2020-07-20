@@ -1,6 +1,10 @@
 package commands
 
-import "os/exec"
+import (
+	"os/exec"
+
+	"github.com/bwmarrin/discordgo"
+)
 
 // FortuneCookie is a Command to return just a random fortune
 type FortuneCookie struct{}
@@ -12,7 +16,7 @@ func (fc FortuneCookie) Check() error {
 }
 
 // ProcessMessage returns a random fortune
-func (fc FortuneCookie) ProcessMessage(...string) (string, error) {
+func (fc FortuneCookie) ProcessMessage(*discordgo.MessageCreate) (string, error) {
 	fortune, err := exec.Command("fortune", "-a").Output()
 	return string(fortune), err
 }

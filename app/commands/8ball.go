@@ -3,6 +3,9 @@ package commands
 import (
 	"errors"
 	"math/rand"
+	"strings"
+
+	"github.com/bwmarrin/discordgo"
 )
 
 var eightBallMessages = []string{"It is certain",
@@ -24,8 +27,8 @@ func (e EightBall) Check() error {
 }
 
 // ProcessMessage will return an error if no arguments are provided, otherwise a random message is chosen
-func (e EightBall) ProcessMessage(msg ...string) (string, error) {
-	if len(msg) == 0 {
+func (e EightBall) ProcessMessage(m *discordgo.MessageCreate) (string, error) {
+	if len(strings.Fields(m.Content)) == 1 {
 		return "", errors.New("You didn't give me anything to respond to")
 	}
 	return eightBallMessages[rand.Intn(len(eightBallMessages))], nil

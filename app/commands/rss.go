@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bwmarrin/discordgo"
 	"github.com/k3a/html2text"
 	"github.com/mmcdole/gofeed"
 )
@@ -27,15 +28,18 @@ func (r RSS) Check() error {
 }
 
 // ProcessMessage attempts to parse the first argument as a URL to an RSS feed, then fetch the first argument. If any step fails, an error is returned
-func (r RSS) ProcessMessage(message ...string) (string, error) {
-	if len(message) == 0 {
+func (r RSS) ProcessMessage(m *discordgo.MessageCreate) (string, error) {
+	splitContent := strings.Fields(m.Content)
+	if len(splitContent) < 2 {
 		return "", errors.New("Sure, let me test if that's valid.\n" +
 			"Here comes the feed: _You are a horrible person_. " +
 			"I'm serious, that's what's in the feed: _\"A horrible person\"_. We weren't even testing for that")
 	}
+	message := strings.Fields(strings.ToLower(m.Content))[1:]
 	switch message[0] {
 	case "list":
 		return handleList()
+
 	case "find":
 		return feedByID(message)
 	case "latest":

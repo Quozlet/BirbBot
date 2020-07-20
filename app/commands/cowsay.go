@@ -6,6 +6,8 @@ import (
 	"math/rand"
 	"os/exec"
 	"strings"
+
+	"github.com/bwmarrin/discordgo"
 )
 
 var cows []string
@@ -27,13 +29,13 @@ func (c Cowsay) Check() error {
 }
 
 // ProcessMessage processes a message and returns a cow saying it, or an error if no message was supplied
-func (c Cowsay) ProcessMessage(message ...string) (string, error) {
-	if len(message) == 0 {
+func (c Cowsay) ProcessMessage(m *discordgo.MessageCreate) (string, error) {
+	splitContent := strings.Fields(m.Content)
+	if len(splitContent) == 1 {
 		return "", errors.New("Cows can't say anything unless you give them something to say, dingus")
 	}
-	// Could use `Choose` but re-using commands should only be used for generating output
 	cow := cows[rand.Intn(len(cows))]
-	cowMsg := strings.Join(message, " ")
+	cowMsg := string([]rune(m.Content)[len(splitContent[0])+1:])
 	// OK to run user provided input
 	/* #nosec */
 	cowsay, err := exec.Command("cowsay", "-f", cow, cowMsg).Output()
@@ -60,12 +62,16 @@ func (f Fortune) Check() error {
 }
 
 // ProcessMessage returns a random cow saying a random message. The provided arguments are ignored
-func (f Fortune) ProcessMessage(m ...string) (string, error) {
+func (f Fortune) ProcessMessage(m *discordgo.MessageCreate) (string, error) {
 	fortune, err := exec.Command("fortune", "-a").Output()
 	if err != nil {
 		return "", err
 	}
-	return Cowsay{}.ProcessMessage(string(fortune))
+	cow := cows[rand.Intn(len(cows))]
+	// OK to run user provided input
+	/* #nosec */
+	cowsay, err := exec.Command("cowsay", "-f", cow, string(fortune)).Output()
+	return fmt.Sprintf("```\n%s\n```", string(cowsay)), err
 }
 
 // CommandList returns a list of aliases for the Fortune Command

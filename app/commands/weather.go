@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/bwmarrin/discordgo"
 )
 
 type weatherReport struct {
@@ -65,11 +67,12 @@ func (w Weather) Check() error {
 }
 
 // ProcessMessage processes a given message and fetches the weather for the location specified in the format specified
-func (w Weather) ProcessMessage(message ...string) (string, error) {
-	if len(message) != 0 {
-		switch message[0] {
+func (w Weather) ProcessMessage(m *discordgo.MessageCreate) (string, error) {
+	splitCmd := strings.Fields(m.Content)
+	if len(splitCmd) > 1 {
+		switch strings.ToLower(splitCmd[1]) {
 		case "simple":
-			url, err := createWeatherURL(message[1:])
+			url, err := createWeatherURL(splitCmd[2:])
 			if err != nil {
 				return "", err
 			}
@@ -80,9 +83,9 @@ func (w Weather) ProcessMessage(message ...string) (string, error) {
 			if err != nil {
 				return "", err
 			}
-			return fmt.Sprintf("%s: %s", strings.Title(strings.Join(message[1:], " ")), strings.Split(body, ":")[1]), nil
+			return fmt.Sprintf("%s: %s", strings.Title(strings.Join(splitCmd[2:], " ")), strings.Split(body, ":")[1]), nil
 		case "classic":
-			url, err := createWeatherURL(message[1:])
+			url, err := createWeatherURL(splitCmd[2:])
 			if err != nil {
 				return "", err
 			}
@@ -119,7 +122,7 @@ func (w Weather) ProcessMessage(message ...string) (string, error) {
 				body.NearestArea[0].Country[0].Value), nil
 
 		default:
-			url, err := createWeatherURL(message)
+			url, err := createWeatherURL(splitCmd[1:])
 			if err != nil {
 				return "", err
 			}
@@ -150,14 +153,15 @@ func (f Forecast) Check() error {
 }
 
 // ProcessMessage processes a given message and fetches the weather for the location specified for the day specified
-func (f Forecast) ProcessMessage(message ...string) (string, error) {
+func (f Forecast) ProcessMessage(m *discordgo.MessageCreate) (string, error) {
+	message := strings.Fields(m.Content)[1:]
 	// Start of extended forcast (lines 7-17)
 	start, end := 7, 17
 	url, err := createWeatherURL(message)
 	if err != nil {
 		return "", err
 	}
-	switch message[0] {
+	switch strings.ToLower(message[0]) {
 	case "tomorrow":
 		start += weatherWidth
 		end += weatherWidth

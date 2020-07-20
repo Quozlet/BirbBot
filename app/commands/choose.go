@@ -3,6 +3,9 @@ package commands
 import (
 	"errors"
 	"math/rand"
+	"strings"
+
+	"github.com/bwmarrin/discordgo"
 )
 
 // Choose is a command to randomly select a choice from a set of (space delimited) options
@@ -14,13 +17,15 @@ func (c Choose) Check() error {
 }
 
 // ProcessMessage processes a set of options to pick from, selecting one at random or returning an error if none are provided
-func (c Choose) ProcessMessage(message ...string) (string, error) {
-	if len(message) == 0 {
+func (c Choose) ProcessMessage(m *discordgo.MessageCreate) (string, error) {
+	splitContent := strings.Fields(m.Content)
+	if len(splitContent) == 1 {
 		return "", errors.New("Choices, choices. " +
 			"Do I choose the nothing you provided, or the nothing I'm going to provide in return? " +
 			"_Hint_: Give me something to pick smarty pants")
 	}
-	return message[rand.Intn(len(message))], nil
+	options := splitContent[1:]
+	return options[rand.Intn(len(options))], nil
 }
 
 // CommandList returns the aliases for the Choose Command
