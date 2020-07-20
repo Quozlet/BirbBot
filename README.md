@@ -10,13 +10,16 @@ These instructions will get you a copy of the project up and running on your loc
 
 [Go](https://golang.org/) or [Docker](https://www.docker.com/) must be installed.
 
+A [package manager](https://en.wikipedia.org/wiki/Package_manager) is recommended for these or any optional dependencies below
+* macOS: [Homebrew](https://brew.sh/)
+* Windows: [Scoop](https://scoop.sh/)
+
 #### Developing with Go
 
 For the `!fortune` and `!cowsay` commands, [`fortune`](https://www.ibiblio.org/pub/linux/games/amusements/fortune/!INDEX.html) and [`cowsay`](https://github.com/tnalpgge/rank-amateur-cowsay) should be installed if developing locally with Go.
 
-To install `fortune` or `cowsay`, use:
-* macOS: [Homebrew](https://brew.sh/)
-* Windows: [Scoop](https://scoop.sh/)
+`!rss`/`!sub` subscriptions are stored in a [SQLite](https://sqlite.org/index.html) database.
+While not strictly a dependency, SQLite can be installed to manually interact with the database
 
 Consider copying [`pre-commit`](pre-commit) as a [Git hook](https://git-scm.com/docs/githooks): `cp pre-commit .git/hooks/pre-commit`.
 

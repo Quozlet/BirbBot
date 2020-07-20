@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"quozlet.net/birbbot/app"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
 func main() {

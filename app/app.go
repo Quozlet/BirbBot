@@ -54,7 +54,7 @@ func commandHandler(s *discordgo.Session, m *discordgo.MessageCreate, commandMap
 	content := strings.Fields(strings.ToLower(m.Content))
 	cmd := commandMap[content[0]]
 	log.Printf("Ack: %s", m.Content)
-	_, err := s.ChannelMessageSend(m.ChannelID, func() string {
+	response := func() string {
 		if cmd != nil {
 			if err := s.MessageReactionAdd(m.ChannelID, m.Message.ID, "✅"); err != nil {
 				log.Println(err)
@@ -101,9 +101,12 @@ func commandHandler(s *discordgo.Session, m *discordgo.MessageCreate, commandMap
 			return fmt.Sprintf("Unrecognized command: `%s`", content[0])
 		}
 
-	}())
-	if err != nil {
-		log.Printf("Failed to respond: %s", err)
+	}()
+	if len(response) != 0 {
+		_, err := s.ChannelMessageSend(m.ChannelID, response)
+		if err != nil {
+			log.Printf("Failed to respond: %s", err)
+		}
 	}
 
 }
