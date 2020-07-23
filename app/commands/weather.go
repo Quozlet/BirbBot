@@ -136,7 +136,18 @@ func (w Weather) ProcessMessage(m *discordgo.MessageCreate, dbPool *pgxpool.Pool
 				if err := insertNewWeatherDB(dbPool, m.Author.ID, url.String()); err != nil {
 					return "", err
 				}
-				return "OK, saved your location", nil
+				q := url.Query()
+				q.Set("format", "j1")
+				url.RawQuery = q.Encode()
+				body, weatherLocationErr := dataWeather(url)
+				if weatherLocationErr != nil {
+					return "", weatherLocationErr
+				}
+				return fmt.Sprintf("OK, saved your location. Closest weather station is %s, %s, %s",
+						body.NearestArea[0].AreaName[0].Value,
+						body.NearestArea[0].Region[0].Value,
+						body.NearestArea[0].Country[0].Value),
+					nil
 			}
 		}
 
@@ -158,7 +169,8 @@ func (w Weather) CommandList() []string {
 
 // Help returns the help message for the Weather Command
 func (w Weather) Help() string {
-	return "Provides the current weather for a location " +
+	return "Provides the current weather for a location\n" +
+		"_If a postal code is provided, put the country as a specifier: e.x. '12345 United States'_\n\n" +
 		"(use `!w`/`!weather simple` for a one line response, and `!w`/`!weather classic` for a detailed text response)\n" +
 		"`!w`/`!weather set` will persist a default weather location if none is specified " +
 		"(setting again will overwrite the previously set location)"
