@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"log"
 	"math/rand"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -10,12 +13,24 @@ import (
 
 	"quozlet.net/birbbot/app"
 
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/jackc/pgx/v4/pgxpool"
 )
 
 func main() {
 	rand.Seed(time.Now().Unix())
-	session, err := app.Start(os.Getenv("DISCORD_SECRET"))
+
+	dbPool, dbErr := pgxpool.Connect(context.Background(), fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
+		os.Getenv("DATABASE_USER"),
+		url.QueryEscape(os.Getenv("DATABASE_PASSWORD")),
+		os.Getenv("DATABASE_URL"),
+		os.Getenv("DATABASE_PORT"),
+		os.Getenv("DATABASE_NAME")))
+	if dbErr != nil {
+		log.Fatal(dbErr)
+		return
+	}
+	defer dbPool.Close()
+	session, err := app.Start(os.Getenv("DISCORD_SECRET"), dbPool)
 	defer func() {
 		// If a session is established, close it properly before exiting
 		if session != nil {

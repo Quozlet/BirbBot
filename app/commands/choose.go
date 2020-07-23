@@ -6,18 +6,19 @@ import (
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/jackc/pgx/v4/pgxpool"
 )
 
 // Choose is a command to randomly select a choice from a set of (space delimited) options
 type Choose struct{}
 
 // Check returns nil since this requires nothing
-func (c Choose) Check() error {
+func (c Choose) Check(*pgxpool.Pool) error {
 	return nil
 }
 
 // ProcessMessage processes a set of options to pick from, selecting one at random or returning an error if none are provided
-func (c Choose) ProcessMessage(m *discordgo.MessageCreate) (string, error) {
+func (c Choose) ProcessMessage(m *discordgo.MessageCreate, _ *pgxpool.Pool) (string, error) {
 	splitContent := strings.Fields(m.Content)
 	if len(splitContent) == 1 {
 		return "", errors.New("Choices, choices. " +

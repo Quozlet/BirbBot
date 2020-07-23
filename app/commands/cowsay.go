@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/jackc/pgx/v4/pgxpool"
 )
 
 var cows []string
@@ -16,7 +17,7 @@ var cows []string
 type Cowsay struct{}
 
 // Check asserts cowsay is present and a list of cows could be generated, returning an error if that isn't possible
-func (c Cowsay) Check() error {
+func (c Cowsay) Check(*pgxpool.Pool) error {
 	cowsayOptions, err := exec.Command("cowsay", "-l").Output()
 	if err != nil {
 		return err
@@ -29,7 +30,7 @@ func (c Cowsay) Check() error {
 }
 
 // ProcessMessage processes a message and returns a cow saying it, or an error if no message was supplied
-func (c Cowsay) ProcessMessage(m *discordgo.MessageCreate) (string, error) {
+func (c Cowsay) ProcessMessage(m *discordgo.MessageCreate, _ *pgxpool.Pool) (string, error) {
 	splitContent := strings.Fields(m.Content)
 	if len(splitContent) == 1 {
 		return "", errors.New("Cows can't say anything unless you give them something to say, dingus")

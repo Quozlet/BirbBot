@@ -1,7 +1,7 @@
 package commands
 
 import (
-	"database/sql"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/jackc/pgx/v4/pgxpool"
 )
 
 type weatherReport struct {
@@ -63,22 +64,22 @@ const weatherWidth = 10
 type Weather struct{}
 
 // Check validates the weather URL
-func (w Weather) Check() error {
+func (w Weather) Check(dbPool *pgxpool.Pool) error {
 	_, err := url.Parse(weatherURL)
 	if err != nil {
 		return err
 	}
-	return loadWeatherDB()
+	return loadWeatherDB(dbPool)
 }
 
 // ProcessMessage processes a given message and fetches the weather for the location specified in the format specified
-func (w Weather) ProcessMessage(m *discordgo.MessageCreate) (string, error) {
+func (w Weather) ProcessMessage(m *discordgo.MessageCreate, dbPool *pgxpool.Pool) (string, error) {
 	splitCmd := strings.Fields(m.Content)
 	if len(splitCmd) != 0 {
 		if len(splitCmd) > 1 {
 			switch strings.ToLower(splitCmd[1]) {
 			case "simple":
-				url, err := createWeatherURL(splitCmd[2:], m.Author.ID)
+				url, err := createWeatherURL(splitCmd[2:], m.Author.ID, dbPool)
 				if err != nil {
 					return "", err
 				}
@@ -91,7 +92,7 @@ func (w Weather) ProcessMessage(m *discordgo.MessageCreate) (string, error) {
 				}
 				return fmt.Sprintf("%s: %s", strings.Title(strings.Join(splitCmd[2:], " ")), strings.Split(body, ":")[1]), nil
 			case "classic":
-				url, err := createWeatherURL(splitCmd[2:], m.Author.ID)
+				url, err := createWeatherURL(splitCmd[2:], m.Author.ID, dbPool)
 				if err != nil {
 					return "", err
 				}
@@ -128,18 +129,18 @@ func (w Weather) ProcessMessage(m *discordgo.MessageCreate) (string, error) {
 					body.NearestArea[0].Country[0].Value), nil
 
 			case "set":
-				url, urlErr := createWeatherURL(splitCmd[2:], m.Author.ID)
+				url, urlErr := createWeatherURL(splitCmd[2:], m.Author.ID, dbPool)
 				if urlErr != nil {
 					return "", urlErr
 				}
-				if err := insertNewWeatherDB(m.Author.ID, url.String()); err != nil {
+				if err := insertNewWeatherDB(dbPool, m.Author.ID, url.String()); err != nil {
 					return "", err
 				}
 				return "OK, saved your location", nil
 			}
 		}
 
-		url, err := createWeatherURL(splitCmd[1:], m.Author.ID)
+		url, err := createWeatherURL(splitCmd[1:], m.Author.ID, dbPool)
 		if err != nil {
 			return "", err
 		}
@@ -167,17 +168,17 @@ func (w Weather) Help() string {
 type Forecast struct{}
 
 // Check validates the weather URL
-func (f Forecast) Check() error {
+func (f Forecast) Check(dbPool *pgxpool.Pool) error {
 	_, err := url.Parse(weatherURL)
 	return err
 }
 
 // ProcessMessage processes a given message and fetches the weather for the location specified for the day specified
-func (f Forecast) ProcessMessage(m *discordgo.MessageCreate) (string, error) {
+func (f Forecast) ProcessMessage(m *discordgo.MessageCreate, dbPool *pgxpool.Pool) (string, error) {
 	message := strings.Fields(m.Content)[1:]
 	// Start of extended forcast (lines 7-17)
 	start, end := 7, 17
-	url, err := createWeatherURL(message, m.Author.ID)
+	url, err := createWeatherURL(message, m.Author.ID, dbPool)
 	if err != nil {
 		return "", err
 	}
@@ -186,11 +187,11 @@ func (f Forecast) ProcessMessage(m *discordgo.MessageCreate) (string, error) {
 		case "tomorrow":
 			start += weatherWidth
 			end += weatherWidth
-			url, err = createWeatherURL(message[1:], m.Author.ID)
+			url, err = createWeatherURL(message[1:], m.Author.ID, dbPool)
 		case "last":
 			start += 2 * weatherWidth
 			end += 2 * weatherWidth
-			url, err = createWeatherURL(message[1:], m.Author.ID)
+			url, err = createWeatherURL(message[1:], m.Author.ID, dbPool)
 		}
 	}
 	if err != nil {
@@ -211,9 +212,9 @@ func (f Forecast) Help() string {
 		"To set a preferred location, use the `!w`/`!weather set` command"
 }
 
-func createWeatherURL(location []string, authorID string) (*url.URL, error) {
+func createWeatherURL(location []string, authorID string, dbPool *pgxpool.Pool) (*url.URL, error) {
 	if len(location) == 0 {
-		savedLocation, err := selectWeatherDB(authorID)
+		savedLocation, err := selectWeatherDB(dbPool, authorID)
 		if err != nil {
 			return nil, err
 		} else if len(savedLocation) == 0 {
@@ -285,85 +286,31 @@ func dataWeather(url *url.URL) (*weatherReport, error) {
 	return &report, nil
 }
 
-const subTableDefinition string = "CREATE TABLE IF NOT EXISTS Weather (User TEXT PRIMARY KEY, Location TEXT NOT NULL)"
-const newSub string = "INSERT INTO Weather(User, Location) VALUES(?, ?) ON CONFLICT(User) DO UPDATE SET Location=excluded.Location"
-const selectSub string = "SELECT Location FROM Weather WHERE User = ?"
+const subTableDefinition string = "CREATE TABLE IF NOT EXISTS Weather (DiscordUserID TEXT PRIMARY KEY, Location TEXT NOT NULL)"
+const newSub string = "INSERT INTO Weather(DiscordUserID, Location) VALUES ($1, $2) ON CONFLICT(DiscordUserID) DO UPDATE SET Location=excluded.Location"
+const selectSub string = "SELECT Location FROM Weather WHERE DiscordUserID = $1"
 
-func loadWeatherDB() error {
-	db, err := sql.Open("sqlite3", "./birbbot.db")
+func loadWeatherDB(dbPool *pgxpool.Pool) error {
+	tag, err := dbPool.Exec(context.Background(), subTableDefinition)
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(subTableDefinition)
-	if err != nil {
-		return err
-	}
+	log.Println(tag)
 	return nil
 }
 
-func insertNewWeatherDB(user string, location string) error {
-	db, dbErr := sql.Open("sqlite3", "./birbbot.db")
-	if dbErr != nil {
-		return dbErr
-	}
-	defer func() {
-		if err := db.Close(); err != nil {
-			log.Println(err)
-		}
-	}()
-	tx, txErr := db.Begin()
-	if txErr != nil {
-		return txErr
-	}
-	stmt, stmtErr := tx.Prepare(newSub)
-	if stmtErr != nil {
-		return stmtErr
-	}
-	defer func() {
-		if err := stmt.Close(); err != nil {
-			log.Println(err)
-		}
-	}()
-	result, execErr := stmt.Exec(user, location)
-	if execErr != nil {
-		return execErr
-	}
-	lastInsertID, insertErr := result.LastInsertId()
-	if insertErr != nil {
-		log.Printf("Successfully inserted into DB, but an error (%s) occurred", insertErr)
-	}
-	rowsAffected, affectedErr := result.RowsAffected()
-	if affectedErr != nil {
-		log.Printf("Successfully inserted into DB, but an error (%s) occurred", affectedErr)
-	}
-	log.Printf("Inserted into database with insertion ID %d (%d rows affected)", lastInsertID, rowsAffected)
-	if err := tx.Commit(); err != nil {
+func insertNewWeatherDB(dbPool *pgxpool.Pool, user string, location string) error {
+	tag, err := dbPool.Exec(context.Background(), newSub, user, location)
+	if err != nil {
 		return err
 	}
+	log.Println(tag)
 	return nil
 }
 
-func selectWeatherDB(user string) (string, error) {
-	db, dbErr := sql.Open("sqlite3", "./birbbot.db")
-	if dbErr != nil {
-		return "", dbErr
-	}
-	defer func() {
-		if err := db.Close(); err != nil {
-			log.Println(err)
-		}
-	}()
-	stmt, err := db.Prepare(selectSub)
-	if err != nil {
-		return "", err
-	}
-	defer func() {
-		if err := stmt.Close(); err != nil {
-			log.Println(err)
-		}
-	}()
+func selectWeatherDB(dbPool *pgxpool.Pool, user string) (string, error) {
 	var location string
-	if err := stmt.QueryRow(user).Scan(&location); err != nil {
+	if err := dbPool.QueryRow(context.Background(), selectSub, user).Scan(&location); err != nil {
 		return "", err
 	}
 	return location, nil

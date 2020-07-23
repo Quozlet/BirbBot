@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/jackc/pgx/v4/pgxpool"
 )
 
 var eightBallMessages = []string{"It is certain",
@@ -22,12 +23,12 @@ var eightBallMessages = []string{"It is certain",
 type EightBall struct{}
 
 // Check always returns nil (all messages are guaranteed to be allocated)
-func (e EightBall) Check() error {
+func (e EightBall) Check(*pgxpool.Pool) error {
 	return nil
 }
 
 // ProcessMessage will return an error if no arguments are provided, otherwise a random message is chosen
-func (e EightBall) ProcessMessage(m *discordgo.MessageCreate) (string, error) {
+func (e EightBall) ProcessMessage(m *discordgo.MessageCreate, _ *pgxpool.Pool) (string, error) {
 	if len(strings.Fields(m.Content)) == 1 {
 		return "", errors.New("You didn't give me anything to respond to")
 	}

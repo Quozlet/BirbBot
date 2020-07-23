@@ -1,0 +1,17 @@
+version: '3'
+services:
+  birbbot:
+    build: .
+    env_file:
+      - .env
+    depends_on:
+      - postgres
+    restart: unless-stopped
+  postgres:
+    image: 'postgres:latest'
+    env_file:
+      - db.env
+    volumes:
+      - db-data:/var/lib/postgresql/data
+volumes:
+  db-data:

@@ -3,7 +3,6 @@ package commands
 import (
 	"context"
 	"crypto/sha512"
-	"database/sql"
 	"errors"
 	"fmt"
 	"log"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/k3a/html2text"
 	"github.com/mmcdole/gofeed"
 )
@@ -21,12 +21,12 @@ import (
 type RSS struct{}
 
 // Check returns nil
-func (r RSS) Check() error {
-	return loadFeedDB()
+func (r RSS) Check(dbPool *pgxpool.Pool) error {
+	return loadFeedDB(dbPool)
 }
 
 // ProcessMessage attempts to parse the first argument as a URL to an RSS feed, then fetch the first argument. If any step fails, an error is returned
-func (r RSS) ProcessMessage(m *discordgo.MessageCreate) (string, error) {
+func (r RSS) ProcessMessage(m *discordgo.MessageCreate, dbPool *pgxpool.Pool) (string, error) {
 	splitContent := strings.Fields(m.Content)
 	if len(splitContent) < 2 {
 		return "", errors.New("Sure, let me test if that's valid.\n" +
@@ -36,12 +36,12 @@ func (r RSS) ProcessMessage(m *discordgo.MessageCreate) (string, error) {
 	message := strings.Fields(strings.ToLower(m.Content))[1:]
 	switch message[0] {
 	case "list":
-		return handleList()
+		return handleList(dbPool)
 
 	case "find":
-		return feedByID(message)
+		return feedByID(message, dbPool)
 	case "latest":
-		return handleLatest(message)
+		return handleLatest(message, dbPool)
 	default:
 		url, err := url.Parse(message[0])
 		if err != nil {
@@ -54,15 +54,15 @@ func (r RSS) ProcessMessage(m *discordgo.MessageCreate) (string, error) {
 		}
 		feed.Title = html2text.HTML2Text(feed.Title)
 		rssFeed := fmt.Sprintf("Fetched **%s** _(%s)_", feed.Title, html2text.HTML2Text(feed.Description))
-		if err := insertNewFeedDB(feed, url); err != nil {
+		if err := insertNewFeedDB(dbPool, feed, url); err != nil {
 			return "", err
 		}
 		return rssFeed, nil
 	}
 }
 
-func handleList() (string, error) {
-	feeds, err := selectAllFeedDB()
+func handleList(dbPool *pgxpool.Pool) (string, error) {
+	feeds, err := selectAllFeedDB(dbPool)
 	if err != nil {
 		return "", err
 	}
@@ -76,7 +76,7 @@ func handleList() (string, error) {
 	return builder.String(), nil
 }
 
-func feedByID(args []string) (string, error) {
+func feedByID(args []string, dbPool *pgxpool.Pool) (string, error) {
 	if len(args) == 1 {
 		return "", errors.New("<insert 404 joke here> Look, you didn't provide anything to find")
 	}
@@ -84,14 +84,14 @@ func feedByID(args []string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	info, err := selectFeedDB(id)
+	info, err := selectFeedDB(dbPool, id)
 	if err != nil {
 		return "", err
 	}
 	return fmt.Sprintf("**%s** <%s>", info.Title, info.URL), nil
 }
 
-func handleLatest(args []string) (string, error) {
+func handleLatest(args []string, dbPool *pgxpool.Pool) (string, error) {
 	if len(args) == 1 {
 		return "", errors.New("**My Database**\nzilch\n\nTry providing an ID to search by")
 	}
@@ -99,7 +99,7 @@ func handleLatest(args []string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	info, err := selectFeedDB(id)
+	info, err := selectFeedDB(dbPool, id)
 	if err != nil {
 		return "", err
 	}
@@ -122,7 +122,7 @@ func handleLatest(args []string) (string, error) {
 	}
 	hash := sha.Sum(nil)
 	if fmt.Sprintf("%x", hash) != fmt.Sprintf("%x", info.LastItem) {
-		if err := updateLatestFeedDB(hash, id); err != nil {
+		if err := updateLatestFeedDB(dbPool, hash, id); err != nil {
 			return "", err
 		}
 		return fmt.Sprintf("%s: %s", info.Title, latest), nil
@@ -165,11 +165,11 @@ func refreshFeed(url *url.URL) (*gofeed.Feed, error) {
 
 // SQL Definitions/Helpers
 
-const feedTableDefinition string = "CREATE TABLE IF NOT EXISTS Feeds (ID INTEGER PRIMARY KEY AUTOINCREMENT, Title TEXT NOT NULL, URL TEXT UNIQUE NOT NULL, LastItemHash BLOB)"
-const feedNew string = "INSERT INTO Feeds(Title, URL, LastItemHash) values(?, ?, ?)"
+const feedTableDefinition string = "CREATE TABLE IF NOT EXISTS Feeds (ID SERIAL PRIMARY KEY, Title TEXT NOT NULL, URL TEXT UNIQUE NOT NULL, LastItemHash BYTEA)"
+const feedNew string = "INSERT INTO Feeds(Title, URL, LastItemHash) VALUES ($1, $2, $3) ON CONFLICT (URL) DO NOTHING"
 const feedList string = "SELECT ID, Title, URL, LastItemHash FROM Feeds"
-const feedSelect string = "SELECT Title, URL, LastItemHash FROM Feeds WHERE ID = ?"
-const feedUpdate string = "UPDATE Feeds SET LastItemHash = ? WHERE ID = ?"
+const feedSelect string = "SELECT Title, URL, LastItemHash FROM Feeds WHERE ID = $1"
+const feedUpdate string = "UPDATE Feeds SET LastItemHash = $1 WHERE ID = $2"
 
 type feedInfo struct {
 	ID       int64
@@ -178,81 +178,29 @@ type feedInfo struct {
 	LastItem []byte
 }
 
-func loadFeedDB() error {
-	db, err := sql.Open("sqlite3", "./birbbot.db")
+func loadFeedDB(dbPool *pgxpool.Pool) error {
+	tag, err := dbPool.Exec(context.Background(), feedTableDefinition)
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(feedTableDefinition)
+	log.Println(tag)
+	return nil
+}
+
+func insertNewFeedDB(dbPool *pgxpool.Pool, feed *gofeed.Feed, url *url.URL) error {
+	tag, err := dbPool.Exec(context.Background(), feedNew, html2text.HTML2Text(feed.Title), url.String(), nil)
 	if err != nil {
 		return err
 	}
+	log.Println(tag)
 	return nil
 }
 
-func insertNewFeedDB(feed *gofeed.Feed, url *url.URL) error {
-	db, dbErr := sql.Open("sqlite3", "./birbbot.db")
-	if dbErr != nil {
-		return dbErr
+func selectAllFeedDB(dbPool *pgxpool.Pool) ([]*feedInfo, error) {
+	rows, err := dbPool.Query(context.Background(), feedList)
+	if err != nil {
+		return nil, err
 	}
-	defer func() {
-		if err := db.Close(); err != nil {
-			log.Println(err)
-		}
-	}()
-	tx, txErr := db.Begin()
-	if txErr != nil {
-		return txErr
-	}
-	stmt, stmtErr := tx.Prepare(feedNew)
-	if stmtErr != nil {
-		return stmtErr
-	}
-	defer func() {
-		if err := stmt.Close(); err != nil {
-			log.Println(err)
-		}
-	}()
-	title := html2text.HTML2Text(feed.Title)
-	urlString := url.String()
-	result, execErr := stmt.Exec(title, urlString, nil)
-	if execErr != nil {
-		return execErr
-	}
-	lastInsertID, insertErr := result.LastInsertId()
-	if insertErr != nil {
-		log.Printf("Successfully inserted into DB, but an error (%s) occurred", insertErr)
-	}
-	rowsAffected, affectedErr := result.RowsAffected()
-	if affectedErr != nil {
-		log.Printf("Successfully inserted into DB, but an error (%s) occurred", affectedErr)
-	}
-	log.Printf("Inserted into database with insertion ID %d (%d rows affected)", lastInsertID, rowsAffected)
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	return nil
-}
-
-func selectAllFeedDB() ([]*feedInfo, error) {
-	db, dbErr := sql.Open("sqlite3", "./birbbot.db")
-	if dbErr != nil {
-		return nil, dbErr
-	}
-	defer func() {
-		if err := db.Close(); err != nil {
-			log.Println(err)
-		}
-	}()
-	rows, queryErr := db.Query(feedList)
-	if queryErr != nil {
-		return nil, queryErr
-	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			log.Println(err)
-		}
-	}()
 	info := []*feedInfo{}
 	for rows.Next() {
 		var id int64
@@ -275,63 +223,21 @@ func selectAllFeedDB() ([]*feedInfo, error) {
 	return info, nil
 }
 
-func selectFeedDB(id int64) (*feedInfo, error) {
-	db, dbErr := sql.Open("sqlite3", "./birbbot.db")
-	if dbErr != nil {
-		return nil, dbErr
-	}
-	defer func() {
-		if err := db.Close(); err != nil {
-			log.Println(err)
-		}
-	}()
-	stmt, err := db.Prepare(feedSelect)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err := stmt.Close(); err != nil {
-			log.Println(err)
-		}
-	}()
+func selectFeedDB(dbPool *pgxpool.Pool, id int64) (*feedInfo, error) {
 	var title string
 	var url string
 	var lastItem []byte
-	if err := stmt.QueryRow(id).Scan(&title, &url, &lastItem); err != nil {
+	if err := dbPool.QueryRow(context.Background(), feedSelect, id).Scan(&title, &url, &lastItem); err != nil {
 		return nil, err
 	}
 	return &feedInfo{ID: id, Title: title, URL: url, LastItem: lastItem}, nil
 }
 
-func updateLatestFeedDB(hash []byte, id int64) error {
-	db, dbErr := sql.Open("sqlite3", "./birbbot.db")
-	if dbErr != nil {
-		return dbErr
-	}
-	defer func() {
-		if err := db.Close(); err != nil {
-			log.Println(err)
-		}
-	}()
-	tx, txError := db.Begin()
-	if txError != nil {
-		return txError
-	}
-	stmt, stmtErr := tx.Prepare(feedUpdate)
-	if stmtErr != nil {
-		return stmtErr
-	}
-	defer func() {
-		if err := stmt.Close(); err != nil {
-			log.Println(err)
-		}
-	}()
-	_, execErr := stmt.Exec(hash, id)
-	if execErr != nil {
-		return execErr
-	}
-	if err := tx.Commit(); err != nil {
+func updateLatestFeedDB(dbPool *pgxpool.Pool, hash []byte, id int64) error {
+	tag, err := dbPool.Exec(context.Background(), feedUpdate, hash, id)
+	if err != nil {
 		return err
 	}
+	log.Println(tag)
 	return nil
 }

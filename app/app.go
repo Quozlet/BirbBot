@@ -7,15 +7,16 @@ import (
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/jackc/pgx/v4/pgxpool"
 	"quozlet.net/birbbot/app/commands"
 )
 
 // Command is an interface that must be implemented for commands
 type Command interface {
 	// Check asserts all preconditions are met, and returns an error if they are not
-	Check() error
+	Check(*pgxpool.Pool) error
 	// ProcessMessage processes all additional arguments to the command (split on whitespace)
-	ProcessMessage(m *discordgo.MessageCreate) (string, error)
+	ProcessMessage(*discordgo.MessageCreate, *pgxpool.Pool) (string, error)
 	// CommandList returns all aliases for the given command (must return at least one)
 	CommandList() []string
 	// Help returns the help message for the command
@@ -23,11 +24,11 @@ type Command interface {
 }
 
 // Start a Discord session for a given token
-func Start(secret string) (*discordgo.Session, error) {
+func Start(secret string, dbPool *pgxpool.Pool) (*discordgo.Session, error) {
 	if len(secret) == 0 {
 		return nil, errors.New("Not attempting connection, secret seems incorrect")
 	}
-	commandMap, commandList := discoverCommand()
+	commandMap, commandList := discoverCommand(dbPool)
 	session, err := discordgo.New("Bot " + secret)
 	if err != nil {
 		log.Println("Unable to create Discord session")
@@ -40,7 +41,7 @@ func Start(secret string) (*discordgo.Session, error) {
 		if m.Author.ID == s.State.User.ID || !strings.HasPrefix(m.Content, "!") {
 			return
 		}
-		commandHandler(s, m, commandMap, commandList)
+		commandHandler(s, m, dbPool, commandMap, commandList)
 	})
 	if err = session.Open(); err != nil {
 		log.Println("Failed to open WebSocket connection to Discord servers")
@@ -50,7 +51,7 @@ func Start(secret string) (*discordgo.Session, error) {
 	return session, nil
 }
 
-func commandHandler(s *discordgo.Session, m *discordgo.MessageCreate, commandMap map[string]*Command, commandList []string) {
+func commandHandler(s *discordgo.Session, m *discordgo.MessageCreate, dbPool *pgxpool.Pool, commandMap map[string]*Command, commandList []string) {
 	content := strings.Fields(strings.ToLower(m.Content))
 	cmd := commandMap[content[0]]
 	log.Printf("Ack %s: %s", m.Author.Username, m.Content)
@@ -64,7 +65,7 @@ func commandHandler(s *discordgo.Session, m *discordgo.MessageCreate, commandMap
 					log.Println(err)
 				}
 			}()
-			response, msgError := (*cmd).ProcessMessage(m)
+			response, msgError := (*cmd).ProcessMessage(m, dbPool)
 			if msgError != nil {
 				log.Printf("An error occurred processing %s: %s", content, msgError.Error())
 				if err := s.MessageReactionRemove(m.ChannelID, m.Message.ID, "✅", s.State.User.ID); err != nil {
@@ -113,7 +114,7 @@ func commandHandler(s *discordgo.Session, m *discordgo.MessageCreate, commandMap
 
 // TODO: Automatically populate commands (requires some AST parser black magic)
 // In the meantime newly added commands must implement all methods in the Command interface and be added to the list
-func discoverCommand() (map[string]*Command, []string) {
+func discoverCommand(dbPool *pgxpool.Pool) (map[string]*Command, []string) {
 	commandMap := make(map[string]*Command)
 	for _, cmd := range []interface{}{
 		commands.EightBall{},
@@ -130,7 +131,7 @@ func discoverCommand() (map[string]*Command, []string) {
 	} {
 		command, ok := cmd.(Command)
 		if ok {
-			if err := command.Check(); err != nil {
+			if err := command.Check(dbPool); err != nil {
 				log.Println(err)
 			} else {
 				for _, alias := range command.CommandList() {
