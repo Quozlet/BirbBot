@@ -57,13 +57,13 @@ func (c Cowsay) Help() string {
 type Fortune struct{}
 
 // Check asserts `fortune` is present as a command
-func (f Fortune) Check() error {
+func (f Fortune) Check(*pgxpool.Pool) error {
 	_, err := exec.Command("fortune").Output()
 	return err
 }
 
 // ProcessMessage returns a random cow saying a random message. The provided arguments are ignored
-func (f Fortune) ProcessMessage(m *discordgo.MessageCreate) (string, error) {
+func (f Fortune) ProcessMessage(m *discordgo.MessageCreate, _ *pgxpool.Pool) (string, error) {
 	fortune, err := exec.Command("fortune", "-a").Output()
 	if err != nil {
 		return "", err
