@@ -79,75 +79,17 @@ func (w Weather) ProcessMessage(m *discordgo.MessageCreate, dbPool *pgxpool.Pool
 		if len(splitCmd) > 1 {
 			switch strings.ToLower(splitCmd[1]) {
 			case "simple":
-				url, err := createWeatherURL(splitCmd[2:], m.Author.ID, dbPool)
-				if err != nil {
-					return "", err
-				}
-				q := url.Query()
-				q.Set("format", "4")
-				url.RawQuery = q.Encode()
-				body, err := weatherResponse(url)
-				if err != nil {
-					return "", err
-				}
-				return fmt.Sprintf("%s: %s", strings.Title(strings.Join(splitCmd[2:], " ")), strings.Split(body, ":")[1]), nil
+				return handleSimple(splitCmd[2:], m.Author.ID, dbPool)
+
 			case "classic":
-				url, err := createWeatherURL(splitCmd[2:], m.Author.ID, dbPool)
-				if err != nil {
-					return "", err
-				}
-				q := url.Query()
-				q.Set("format", "j1")
-				url.RawQuery = q.Encode()
-				body, err := dataWeather(url)
-				if err != nil {
-					return "", err
-				}
-				var precip string
-				if body.Weather[0].Hourly[0].ChanceOfRain < body.Weather[0].Hourly[0].ChanceOfSnow {
-					precip = fmt.Sprintf("%d%% chance of snow", body.Weather[0].Hourly[0].ChanceOfSnow)
-				} else {
-					precip = fmt.Sprintf("%d%% chance of rain", body.Weather[0].Hourly[0].ChanceOfRain)
-				}
-				return fmt.Sprintf("%s, %dºF (%dºC) / feels like %dºF (%dºC) | High: %dºF (%dºC) | Low %dºF (%dºC) | Humidity: %d%% | Wind: %s @ %dmph (%dkm/h) | %s (%s, %s, %s)",
-					body.CurrentCondition[0].WeatherDesc[0].Value,
-					body.CurrentCondition[0].TempF,
-					body.CurrentCondition[0].TempC,
-					body.CurrentCondition[0].FeelsLikeF,
-					body.CurrentCondition[0].FeelsLikeC,
-					body.Weather[0].MaxTempF,
-					body.Weather[0].MaxTempC,
-					body.Weather[0].MinTempF,
-					body.Weather[0].MinTempC,
-					body.CurrentCondition[0].Humidity,
-					body.CurrentCondition[0].Winddir16Point,
-					body.CurrentCondition[0].WindspeedMiles,
-					body.CurrentCondition[0].WindspeedKmph,
-					precip,
-					body.NearestArea[0].AreaName[0].Value,
-					body.NearestArea[0].Region[0].Value,
-					body.NearestArea[0].Country[0].Value), nil
+				return handleClassic(splitCmd[2:], m.Author.ID, dbPool)
 
 			case "set":
-				url, urlErr := createWeatherURL(splitCmd[2:], m.Author.ID, dbPool)
-				if urlErr != nil {
-					return "", urlErr
-				}
-				if err := insertNewWeatherDB(dbPool, m.Author.ID, url.String()); err != nil {
-					return "", err
-				}
-				q := url.Query()
-				q.Set("format", "j1")
-				url.RawQuery = q.Encode()
-				body, weatherLocationErr := dataWeather(url)
-				if weatherLocationErr != nil {
-					return "", weatherLocationErr
-				}
-				return fmt.Sprintf("OK, saved your location. Closest weather station is %s, %s, %s",
-						body.NearestArea[0].AreaName[0].Value,
-						body.NearestArea[0].Region[0].Value,
-						body.NearestArea[0].Country[0].Value),
-					nil
+				return handleSet(splitCmd[2:], m.Author.ID, dbPool)
+
+			case "clear":
+				return handleClear(m.Author.ID, dbPool)
+
 			}
 		}
 
@@ -173,7 +115,91 @@ func (w Weather) Help() string {
 		"_If a postal code is provided, put the country as a specifier: e.x. '12345 United States'_\n\n" +
 		"(use `!w`/`!weather simple` for a one line response, and `!w`/`!weather classic` for a detailed text response)\n" +
 		"`!w`/`!weather set` will persist a default weather location if none is specified " +
-		"(setting again will overwrite the previously set location)"
+		"(setting again will overwrite the previously set location)\n" +
+		"`!w`/`!weather clear` will clear your preferences (it will always return success unless a database error occurred)"
+}
+
+func handleClassic(location []string, discordUserID string, dbPool *pgxpool.Pool) (string, error) {
+	url, err := createWeatherURL(location, discordUserID, dbPool)
+	if err != nil {
+		return "", err
+	}
+	q := url.Query()
+	q.Set("format", "j1")
+	url.RawQuery = q.Encode()
+	body, err := dataWeather(url)
+	if err != nil {
+		return "", err
+	}
+	var precip string
+	if body.Weather[0].Hourly[0].ChanceOfRain < body.Weather[0].Hourly[0].ChanceOfSnow {
+		precip = fmt.Sprintf("%d%% chance of snow", body.Weather[0].Hourly[0].ChanceOfSnow)
+	} else {
+		precip = fmt.Sprintf("%d%% chance of rain", body.Weather[0].Hourly[0].ChanceOfRain)
+	}
+	return fmt.Sprintf("%s, %dºF (%dºC) / feels like %dºF (%dºC) | High: %dºF (%dºC) | Low %dºF (%dºC) | Humidity: %d%% | Wind: %s @ %dmph (%dkm/h) | %s (%s, %s, %s)",
+		body.CurrentCondition[0].WeatherDesc[0].Value,
+		body.CurrentCondition[0].TempF,
+		body.CurrentCondition[0].TempC,
+		body.CurrentCondition[0].FeelsLikeF,
+		body.CurrentCondition[0].FeelsLikeC,
+		body.Weather[0].MaxTempF,
+		body.Weather[0].MaxTempC,
+		body.Weather[0].MinTempF,
+		body.Weather[0].MinTempC,
+		body.CurrentCondition[0].Humidity,
+		body.CurrentCondition[0].Winddir16Point,
+		body.CurrentCondition[0].WindspeedMiles,
+		body.CurrentCondition[0].WindspeedKmph,
+		precip,
+		body.NearestArea[0].AreaName[0].Value,
+		body.NearestArea[0].Region[0].Value,
+		body.NearestArea[0].Country[0].Value), nil
+}
+
+func handleSimple(location []string, discordUserID string, dbPool *pgxpool.Pool) (string, error) {
+	url, err := createWeatherURL(location, discordUserID, dbPool)
+	if err != nil {
+		return "", err
+	}
+	q := url.Query()
+	q.Set("format", "4")
+	url.RawQuery = q.Encode()
+	body, err := weatherResponse(url)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s: %s", strings.Title(strings.Join(location, " ")), strings.Split(body, ":")[1]), nil
+}
+
+func handleSet(location []string, discordUserID string, dbPool *pgxpool.Pool) (string, error) {
+	url, urlErr := createWeatherURL(location, discordUserID, dbPool)
+	if urlErr != nil {
+		return "", urlErr
+	}
+	if err := insertNewWeatherDB(dbPool, discordUserID, url.String()); err != nil {
+		return "", err
+	}
+	q := url.Query()
+	q.Set("format", "j1")
+	url.RawQuery = q.Encode()
+	body, weatherLocationErr := dataWeather(url)
+	if weatherLocationErr != nil {
+		return "", weatherLocationErr
+	}
+	return fmt.Sprintf("OK, saved your location. Closest weather station is %s, %s, %s",
+			body.NearestArea[0].AreaName[0].Value,
+			body.NearestArea[0].Region[0].Value,
+			body.NearestArea[0].Country[0].Value),
+		nil
+}
+
+func handleClear(discordUserID string, dbPool *pgxpool.Pool) (string, error) {
+	if err := clearUserWeatherDB(dbPool, discordUserID); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("Your preferences have been cleared from the database\n" +
+		"_Due to automatic logging/backups, there may still be records of this information. To request their deletion please contact the owner of the server_"), nil
 }
 
 // Forecast is a Command to get the Forecast (today's, tomorrow's, or the day after's) for a given location
@@ -221,7 +247,7 @@ func (f Forecast) CommandList() []string {
 func (f Forecast) Help() string {
 	return "Provides today's forecast for a location (either provided or set) " +
 		"(use `!forecast tomorrow`/`!forecast last` to get tomorrow and the day after's forecast, respectively)\n\n" +
-		"To set a preferred location, use the `!w`/`!weather set` command"
+		"To manage set locations, use the `!w`/`!weather set` or `!w`/`!weather clear` commands"
 }
 
 func createWeatherURL(location []string, authorID string, dbPool *pgxpool.Pool) (*url.URL, error) {
@@ -299,8 +325,9 @@ func dataWeather(url *url.URL) (*weatherReport, error) {
 }
 
 const subTableDefinition string = "CREATE TABLE IF NOT EXISTS Weather (DiscordUserID TEXT PRIMARY KEY, Location TEXT NOT NULL)"
-const newSub string = "INSERT INTO Weather(DiscordUserID, Location) VALUES ($1, $2) ON CONFLICT(DiscordUserID) DO UPDATE SET Location=excluded.Location"
+const newSub string = "INSERT INTO Weather (DiscordUserID, Location) VALUES ($1, $2) ON CONFLICT(DiscordUserID) DO UPDATE SET Location=excluded.Location"
 const selectSub string = "SELECT Location FROM Weather WHERE DiscordUserID = $1"
+const dropSub string = "DELETE FROM WEATHER WHERE DiscordUserID = $1"
 
 func loadWeatherDB(dbPool *pgxpool.Pool) error {
 	tag, err := dbPool.Exec(context.Background(), subTableDefinition)
@@ -326,4 +353,13 @@ func selectWeatherDB(dbPool *pgxpool.Pool, user string) (string, error) {
 		return "", err
 	}
 	return location, nil
+}
+
+func clearUserWeatherDB(dbPool *pgxpool.Pool, user string) error {
+	tag, err := dbPool.Exec(context.Background(), dropSub, user)
+	if err != nil {
+		return err
+	}
+	log.Println(tag)
+	return nil
 }
