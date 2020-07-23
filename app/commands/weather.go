@@ -67,9 +67,16 @@ type Weather struct{}
 func (w Weather) Check(dbPool *pgxpool.Pool) error {
 	_, err := url.Parse(weatherURL)
 	if err != nil {
-		return err
+		log.Println(err)
+		return &CommandError{msg: fmt.Sprintf("%s failed check, an error occurred processing the weather URL",
+			strings.Join(w.CommandList(), ","))}
 	}
-	return loadWeatherDB(dbPool)
+	if dbErr := loadWeatherDB(dbPool); err != nil {
+		log.Println(dbErr)
+		return &CommandError{msg: fmt.Sprintf("%s failed check, an error occurred defining the Weather table",
+			strings.Join(w.CommandList(), ","))}
+	}
+	return nil
 }
 
 // ProcessMessage processes a given message and fetches the weather for the location specified in the format specified
@@ -95,13 +102,21 @@ func (w Weather) ProcessMessage(m *discordgo.MessageCreate, dbPool *pgxpool.Pool
 
 		url, err := createWeatherURL(splitCmd[1:], m.Author.ID, dbPool)
 		if err != nil {
-			return "", err
+			log.Println(err)
+			return "", &CommandError{msg: "Tried to create plan to get weather, but it failed. " +
+				"If this occurred when you thought a location was set, it probably isn't"}
 		}
 		// Current forecast (lines 1-7)
-		return detailedWeather(url, 1, 7)
+		forecast, weatherErr := detailedWeather(url, 1, 7)
+		if weatherErr != nil {
+			log.Println(err)
+			return "", &CommandError{msg: "Unable to get the weather! " +
+				"Sorry"}
+		}
+		return forecast, nil
 
 	}
-	return "", errors.New("Provide a location to get the weather for :)")
+	return "", &CommandError{msg: "Provide a location to get the weather for :)"}
 }
 
 // CommandList returns a list of aliases for the Weather Command
@@ -122,14 +137,16 @@ func (w Weather) Help() string {
 func handleClassic(location []string, discordUserID string, dbPool *pgxpool.Pool) (string, error) {
 	url, err := createWeatherURL(location, discordUserID, dbPool)
 	if err != nil {
-		return "", err
+		log.Println(err)
+		return "", &CommandError{msg: "Tried to create plan to get weather, but it failed."}
 	}
 	q := url.Query()
 	q.Set("format", "j1")
 	url.RawQuery = q.Encode()
 	body, err := dataWeather(url)
 	if err != nil {
-		return "", err
+		log.Println(err)
+		return "", &CommandError{msg: "Tried to get the weather forecast, but couldn't fetch it"}
 	}
 	var precip string
 	if body.Weather[0].Hourly[0].ChanceOfRain < body.Weather[0].Hourly[0].ChanceOfSnow {
@@ -160,14 +177,16 @@ func handleClassic(location []string, discordUserID string, dbPool *pgxpool.Pool
 func handleSimple(location []string, discordUserID string, dbPool *pgxpool.Pool) (string, error) {
 	url, err := createWeatherURL(location, discordUserID, dbPool)
 	if err != nil {
-		return "", err
+		log.Println(err)
+		return "", &CommandError{msg: "Tried to create plan to get weather, but it failed."}
 	}
 	q := url.Query()
 	q.Set("format", "4")
 	url.RawQuery = q.Encode()
 	body, err := weatherResponse(url)
 	if err != nil {
-		return "", err
+		log.Println(err)
+		return "", &CommandError{msg: "Tried to get the weather forecast, but couldn't fetch it"}
 	}
 	return fmt.Sprintf("%s: %s", strings.Title(strings.Join(location, " ")), strings.Split(body, ":")[1]), nil
 }
@@ -175,19 +194,25 @@ func handleSimple(location []string, discordUserID string, dbPool *pgxpool.Pool)
 func handleSet(location []string, discordUserID string, dbPool *pgxpool.Pool) (string, error) {
 	url, urlErr := createWeatherURL(location, discordUserID, dbPool)
 	if urlErr != nil {
-		return "", urlErr
+		log.Println(urlErr)
+		return "", &CommandError{msg: "Tried to create plan to get weather, but it failed."}
 	}
 	if err := insertNewWeatherDB(dbPool, discordUserID, url.String()); err != nil {
-		return "", err
+		log.Println(err)
+		return "", &CommandError{msg: "Sorry, I couldn't save your location. " +
+			"An error occured"}
 	}
 	q := url.Query()
 	q.Set("format", "j1")
 	url.RawQuery = q.Encode()
 	body, weatherLocationErr := dataWeather(url)
 	if weatherLocationErr != nil {
-		return "", weatherLocationErr
+		log.Println(weatherLocationErr)
+		return "", &CommandError{msg: "Your weather location was saved, but (FYI) I couldn't figure out the closes weather station. " +
+			"Double check it's a valid location"}
 	}
-	return fmt.Sprintf("OK, saved your location. Closest weather station is %s, %s, %s",
+	return fmt.Sprintf("OK, saved your location. "+
+			"Closest weather station is %s, %s, %s",
 			body.NearestArea[0].AreaName[0].Value,
 			body.NearestArea[0].Region[0].Value,
 			body.NearestArea[0].Country[0].Value),
@@ -196,10 +221,14 @@ func handleSet(location []string, discordUserID string, dbPool *pgxpool.Pool) (s
 
 func handleClear(discordUserID string, dbPool *pgxpool.Pool) (string, error) {
 	if err := clearUserWeatherDB(dbPool, discordUserID); err != nil {
-		return "", err
+		log.Println(err)
+		return "", &CommandError{msg: "Couldn't clear the database. " +
+			"A database error occured. " +
+			"Try again later or contact the server owner"}
 	}
 	return fmt.Sprintf("Your preferences have been cleared from the database\n" +
-		"_Due to automatic logging/backups, there may still be records of this information. To request their deletion please contact the owner of the server_"), nil
+		"_Due to automatic logging/backups, there may still be records of this information. " +
+		"To request their deletion please contact the owner of the server_"), nil
 }
 
 // Forecast is a Command to get the Forecast (today's, tomorrow's, or the day after's) for a given location
@@ -233,9 +262,16 @@ func (f Forecast) ProcessMessage(m *discordgo.MessageCreate, dbPool *pgxpool.Poo
 		}
 	}
 	if err != nil {
-		return "", err
+		log.Println(err)
+		return "", &CommandError{msg: "Failed to make a plan for getting the weather. " +
+			"Try again later (if this occurred when you thought a location was set, it probably isn't)"}
 	}
-	return detailedWeather(url, start, end)
+	forecast, err := detailedWeather(url, start, end)
+	if err != nil {
+		log.Println(err)
+		return "", &CommandError{msg: "Couldn't get the forecast for that location for some reason"}
+	}
+	return forecast, nil
 }
 
 // CommandList returns a list of aliases for the Forecast Command

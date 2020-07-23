@@ -1,10 +1,12 @@
 package commands
 
 import (
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/jackc/pgx/v4/pgxpool"
@@ -20,7 +22,10 @@ type Dog struct{}
 // Check if the dog URL is valid
 func (d Dog) Check() error {
 	_, err := url.Parse(dogURL)
-	return err
+	if err != nil {
+		log.Println(err)
+	}
+	return &CommandError{msg: fmt.Sprintf("%s failed check, URL was invalid", strings.Join(d.CommandList(), ","))}
 }
 
 // ProcessMessage for a Dog Command (will return the URL for a random dog (specifically shibe) image)
@@ -44,7 +49,10 @@ type Cat struct{}
 // Check if the cat URL is valid
 func (c Cat) Check(*pgxpool.Pool) error {
 	_, err := url.Parse(catURL)
-	return err
+	if err != nil {
+		log.Println(err)
+	}
+	return &CommandError{msg: fmt.Sprintf("%s failed check, URL was invalid", strings.Join(c.CommandList(), ","))}
 }
 
 // ProcessMessage for a Cat Command (will return the URL for a random cat image)
@@ -68,7 +76,10 @@ type Bird struct{}
 // Check if the bird URL is valid
 func (b Bird) Check() error {
 	_, err := url.Parse(birdURL)
-	return err
+	if err != nil {
+		log.Println(err)
+	}
+	return &CommandError{msg: fmt.Sprintf("%s failed check, URL was invalid", strings.Join(b.CommandList(), ","))}
 }
 
 // ProcessMessage for a Bird Command (will return the URL for a random bird image)
@@ -92,11 +103,13 @@ func fetchAnimal(url string) (string, error) {
 	/* #nosec */
 	resp, err := http.Get(url)
 	if err != nil {
-		return "", err
+		log.Println(err)
+		return "", &CommandError{msg: "Tried to get an image, but failed to initiate a connection to the API!"}
 	}
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		log.Println(err)
+		return "", &CommandError{msg: "Sueccessfully made a connection, but an error occured reading the response!"}
 	}
 	defer resp.Body.Close()
 	chunkedBody := []rune(string(body))

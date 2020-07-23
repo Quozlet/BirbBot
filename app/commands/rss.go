@@ -3,7 +3,6 @@ package commands
 import (
 	"context"
 	"crypto/sha512"
-	"errors"
 	"fmt"
 	"log"
 	"net/url"
@@ -22,16 +21,22 @@ type RSS struct{}
 
 // Check returns nil
 func (r RSS) Check(dbPool *pgxpool.Pool) error {
-	return loadFeedDB(dbPool)
+	if err := loadFeedDB(dbPool); err != nil {
+		log.Println(err)
+		return &CommandError{msg: fmt.Sprintf("%s failed check, an error occurred defining the RSS table",
+			strings.Join(r.CommandList(), ","))}
+	}
+	return nil
 }
 
 // ProcessMessage attempts to parse the first argument as a URL to an RSS feed, then fetch the first argument. If any step fails, an error is returned
 func (r RSS) ProcessMessage(m *discordgo.MessageCreate, dbPool *pgxpool.Pool) (string, error) {
 	splitContent := strings.Fields(m.Content)
 	if len(splitContent) < 2 {
-		return "", errors.New("Sure, let me test if that's valid.\n" +
+		return "", &CommandError{msg: "Sure, let me test if that's valid.\n" +
 			"Here comes the feed: _You are a horrible person_. " +
-			"I'm serious, that's what's in the feed: _\"A horrible person\"_. We weren't even testing for that")
+			"I'm serious, that's what's in the feed: _\"A horrible person\"_." +
+			" We weren't even testing for that"}
 	}
 	message := strings.Fields(strings.ToLower(m.Content))[1:]
 	switch message[0] {
@@ -40,22 +45,28 @@ func (r RSS) ProcessMessage(m *discordgo.MessageCreate, dbPool *pgxpool.Pool) (s
 
 	case "find":
 		return feedByID(message, dbPool)
+
 	case "latest":
 		return handleLatest(message, dbPool)
+
 	default:
 		url, err := url.Parse(message[0])
 		if err != nil {
-			return "", err
+			log.Println(err)
+			return "", &CommandError{msg: fmt.Sprintf("%s doesn't seem to be a valid URL", message[0])}
 		}
 		url.Scheme = "https"
 		feed, err := refreshFeed(url)
 		if err != nil {
-			return "", err
+			log.Println(err)
+			return "", &CommandError{msg: "Tried to fetch the feed, but some error occurred reading it"}
 		}
 		feed.Title = html2text.HTML2Text(feed.Title)
 		rssFeed := fmt.Sprintf("Fetched **%s** _(%s)_", feed.Title, html2text.HTML2Text(feed.Description))
 		if err := insertNewFeedDB(dbPool, feed, url); err != nil {
-			return "", err
+			log.Println(err)
+			return "", &CommandError{msg: "Went to insert this feed into the database for later, and it didn't seem to like that. " +
+				"Maybe provide a less spicy feed? Or try some Pepto-Bismol"}
 		}
 		return rssFeed, nil
 	}
@@ -64,66 +75,84 @@ func (r RSS) ProcessMessage(m *discordgo.MessageCreate, dbPool *pgxpool.Pool) (s
 func handleList(dbPool *pgxpool.Pool) (string, error) {
 	feeds, err := selectAllFeedDB(dbPool)
 	if err != nil {
-		return "", err
+		log.Println(err)
+		return "", &CommandError{msg: "Couldn't get a list of feeds from the database. " +
+			"Try again later"}
 	}
 	builder := strings.Builder{}
 	for _, info := range feeds {
 		builder.WriteString(fmt.Sprintf("ID: %d | %s\n", info.ID, info.Title))
 	}
 	if builder.Len() == 0 {
-		return "", errors.New("Can't list, you haven't subscribed to any feeds yet")
+		return "", &CommandError{msg: "Can't list, you haven't subscribed to any feeds yet"}
 	}
 	return builder.String(), nil
 }
 
 func feedByID(args []string, dbPool *pgxpool.Pool) (string, error) {
 	if len(args) == 1 {
-		return "", errors.New("<insert 404 joke here> Look, you didn't provide anything to find")
+		return "", &CommandError{msg: "<insert 404 joke here> Look, you didn't provide anything to find"}
 	}
 	id, err := strconv.ParseInt(args[1], 0, 64)
 	if err != nil {
-		return "", err
+		log.Println(err)
+		return "", &CommandError{msg: fmt.Sprintf(
+			"Hey, so, uh, I need an _ID_, a number. "+
+				"%s is not a number", args[1])}
 	}
 	info, err := selectFeedDB(dbPool, id)
 	if err != nil {
-		return "", err
+		log.Println(err)
+		return "", &CommandError{msg: "I understood the ID, but the database says it's invalid. " +
+			"Can you double-check?"}
 	}
 	return fmt.Sprintf("**%s** <%s>", info.Title, info.URL), nil
 }
 
 func handleLatest(args []string, dbPool *pgxpool.Pool) (string, error) {
 	if len(args) == 1 {
-		return "", errors.New("**My Database**\nzilch\n\nTry providing an ID to search by")
+		return "", &CommandError{msg: "**My Database**\nzilch\n\nTry providing an ID to search by"}
 	}
 	id, err := strconv.ParseInt(args[1], 0, 64)
 	if err != nil {
-		return "", err
+		log.Println(err)
+		return "", &CommandError{msg: fmt.Sprintf(
+			"Hey, so, uh, I need an _ID_, a number. "+
+				"%s is not a number", args[1])}
 	}
 	info, err := selectFeedDB(dbPool, id)
 	if err != nil {
-		return "", err
+		log.Println(err)
+		return "", &CommandError{msg: "I understood the ID, but the database says it's invalid. " +
+			"Can you double-check?"}
 	}
 	url, err := url.Parse(info.URL)
 	if err != nil {
-		return "", err
+		log.Println(err)
+		return "", &CommandError{msg: "This isn't good. Somehow an invalid feed URL was saved into the database for this ID"}
 	}
 	feed, err := refreshFeed(url)
 	if err != nil {
-		return "", err
+		log.Println(err)
+		return "", &CommandError{msg: "Tried to fetch the feed, but some error occurred reading it"}
 	}
 	if len(feed.Items) == 0 {
-		return "", errors.New("Successfully fetched the feed, but it looks like it's empty")
+		return "", &CommandError{msg: "Successfully fetched the feed, but it looks like it's empty"}
 	}
 	latest := stringifyItem(feed.Items[0])
 	sha := sha512.New()
 	_, err = sha.Write([]byte(latest))
 	if err != nil {
-		return "", err
+		log.Println(err)
+		return "", &CommandError{msg: "Internal error. " +
+			"I'll probably be confused about the latest item in the feed until it's fetched again"}
 	}
 	hash := sha.Sum(nil)
 	if fmt.Sprintf("%x", hash) != fmt.Sprintf("%x", info.LastItem) {
 		if err := updateLatestFeedDB(dbPool, hash, id); err != nil {
-			return "", err
+			log.Println(err)
+			return "", &CommandError{msg: "Internal error. " +
+				"I'll probably be confused about the latest item in the feed until it's fetched again"}
 		}
 		return fmt.Sprintf("%s: %s", info.Title, latest), nil
 	}

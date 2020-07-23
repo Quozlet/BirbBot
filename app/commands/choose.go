@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"errors"
 	"math/rand"
 	"strings"
 
@@ -21,9 +20,9 @@ func (c Choose) Check(*pgxpool.Pool) error {
 func (c Choose) ProcessMessage(m *discordgo.MessageCreate, _ *pgxpool.Pool) (string, error) {
 	splitContent := strings.Fields(m.Content)
 	if len(splitContent) == 1 {
-		return "", errors.New("Choices, choices. " +
+		return "", &CommandError{msg: "Choices, choices. " +
 			"Do I choose the nothing you provided, or the nothing I'm going to provide in return? " +
-			"_Hint_: Give me something to pick smarty pants")
+			"_Hint_: Give me something to pick smarty pants"}
 	}
 	options := splitContent[1:]
 	return options[rand.Intn(len(options))], nil
