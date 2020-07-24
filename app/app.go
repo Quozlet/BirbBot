@@ -9,19 +9,12 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"quozlet.net/birbbot/app/commands"
+	"quozlet.net/birbbot/app/commands/noargs"
+	"quozlet.net/birbbot/app/commands/noargs/animal"
+	"quozlet.net/birbbot/app/commands/persistent"
+	"quozlet.net/birbbot/app/commands/persistent/weather"
+	"quozlet.net/birbbot/app/commands/simple"
 )
-
-// Command is an interface that must be implemented for commands
-type Command interface {
-	// Check asserts all preconditions are met, and returns an error if they are not
-	Check(*pgxpool.Pool) error
-	// ProcessMessage processes all additional arguments to the command (split on whitespace)
-	ProcessMessage(*discordgo.MessageCreate, *pgxpool.Pool) (string, error)
-	// CommandList returns all aliases for the given command (must return at least one)
-	CommandList() []string
-	// Help returns the help message for the command
-	Help() string
-}
 
 // Start a Discord session for a given token
 func Start(secret string, dbPool *pgxpool.Pool) (*discordgo.Session, error) {
@@ -65,7 +58,7 @@ func commandHandler(s *discordgo.Session, m *discordgo.MessageCreate, dbPool *pg
 					log.Println(err)
 				}
 			}()
-			response, msgError := (*cmd).ProcessMessage(m, dbPool)
+			response, msgError := processMessage(m, cmd, dbPool)
 			if msgError != nil {
 				log.Printf("An error occurred processing %s: %s", content, msgError.Error())
 				if err := s.MessageReactionRemove(m.ChannelID, m.Message.ID, "✅", s.State.User.ID); err != nil {
@@ -87,12 +80,12 @@ func commandHandler(s *discordgo.Session, m *discordgo.MessageCreate, dbPool *pg
 				return fmt.Sprintf("Available commands:\n`%s`,"+
 					" `!license` (the software license that applies to this bot's source code),"+
 					" `!source` (a link to this bot's source code)\n\n"+
-					"(For more information type asking for `!help <command name>`)", strings.Join(commandList, "`, `"))
+					"(For more information on a specific command: `!help <command name>`)", strings.Join(commandList, "`, `"))
 			}
 			return (*commandMap["!"+content[1]]).Help()
 
 		case "!license":
-			return "https://spdx.org/licenses/OSL-3.0.html"
+			return "This bot's source code is licensed under the The Open Software License 3.0 (https://spdx.org/licenses/OSL-3.0.html)"
 
 		case "!source":
 			return "https://github.com/Quozlet/BirbBot"
@@ -117,29 +110,25 @@ func commandHandler(s *discordgo.Session, m *discordgo.MessageCreate, dbPool *pg
 func discoverCommand(dbPool *pgxpool.Pool) (map[string]*Command, []string) {
 	commandMap := make(map[string]*Command)
 	for _, cmd := range []interface{}{
-		commands.EightBall{},
-		commands.Bird{},
-		commands.Cat{},
-		commands.Dog{},
-		commands.Choose{},
-		commands.Cowsay{},
-		commands.Fortune{},
-		commands.FortuneCookie{},
-		commands.RSS{},
-		commands.Weather{},
-		commands.Forecast{},
+		simple.EightBall{},
+		animal.Bird{},
+		animal.Cat{},
+		animal.Dog{},
+		simple.Choose{},
+		simple.Cowsay{},
+		noargs.Fortune{},
+		noargs.FortuneCookie{},
+		persistent.RSS{},
+		weather.Weather{},
+		weather.Forecast{},
 	} {
 		command, ok := cmd.(Command)
-		if ok {
-			if err := command.Check(dbPool); err != nil {
-				log.Println(err)
-			} else {
-				for _, alias := range command.CommandList() {
-					if strings.HasPrefix(alias, "!") {
-						commandMap[alias] = &command
-					} else {
-						log.Printf("Not registering %s (doesn't start with '!')", alias)
-					}
+		if ok && isValidCommand(&command, dbPool) {
+			for _, alias := range command.CommandList() {
+				if strings.HasPrefix(alias, "!") {
+					commandMap[alias] = &command
+				} else {
+					log.Printf("Not registering %s (doesn't start with '!')", alias)
 				}
 			}
 		}
@@ -151,4 +140,47 @@ func discoverCommand(dbPool *pgxpool.Pool) (map[string]*Command, []string) {
 	}
 	log.Printf("Registered commands: %s", strings.Join(keys, ", "))
 	return commandMap, keys
+}
+
+func isValidCommand(command *Command, dbPool *pgxpool.Pool) bool {
+	simpleCmd, isSimple := (*command).(SimpleCommand)
+	noArgsCmd, hasNoArgs := (*command).(NoArgsCommand)
+	persistentCmd, isPersistent := (*command).(PersistentCommand)
+	if isSimple {
+		if err := simpleCmd.Check(); err != nil {
+			log.Println(err)
+			return false
+		}
+	} else if hasNoArgs {
+		if err := noArgsCmd.Check(); err != nil {
+			log.Println(err)
+			return false
+		}
+	} else if isPersistent {
+		if err := persistentCmd.Check(dbPool); err != nil {
+			log.Println(err)
+			return false
+		}
+	} else {
+		log.Printf("%v was recognized as a command, but does not implement a required interface."+
+			" It is therefore ignored", command)
+		return false
+	}
+	return true
+}
+
+func processMessage(m *discordgo.MessageCreate, command *Command, dbPool *pgxpool.Pool) (string, *commands.CommandError) {
+	simpleCmd, isSimple := (*command).(SimpleCommand)
+	noArgsCmd, hasNoArgs := (*command).(NoArgsCommand)
+	persistentCmd, isPersistent := (*command).(PersistentCommand)
+	if isSimple {
+		return simpleCmd.ProcessMessage(m)
+	} else if hasNoArgs {
+		return noArgsCmd.ProcessMessage()
+	} else if isPersistent {
+		return persistentCmd.ProcessMessage(m, dbPool)
+	} else {
+		log.Fatalf("Got %v, an invalid command!", command)
+		return "", commands.NewError("A critical error occurred processing this message")
+	}
 }

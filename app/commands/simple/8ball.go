@@ -1,11 +1,11 @@
-package commands
+package simple
 
 import (
 	"math/rand"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/jackc/pgx/v4/pgxpool"
+	"quozlet.net/birbbot/app/commands"
 )
 
 var eightBallMessages = []string{
@@ -34,14 +34,14 @@ var eightBallMessages = []string{
 type EightBall struct{}
 
 // Check always returns nil (all messages are guaranteed to be allocated)
-func (e EightBall) Check(*pgxpool.Pool) error {
+func (e EightBall) Check() error {
 	return nil
 }
 
 // ProcessMessage will return an error if no arguments are provided, otherwise a random message is chosen
-func (e EightBall) ProcessMessage(m *discordgo.MessageCreate, _ *pgxpool.Pool) (string, error) {
+func (e EightBall) ProcessMessage(m *discordgo.MessageCreate) (string, *commands.CommandError) {
 	if len(strings.Fields(m.Content)) == 1 {
-		return "", &CommandError{msg: "You didn't give me anything to respond to"}
+		return "", commands.NewError("You didn't give me anything to respond to")
 	}
 	return eightBallMessages[rand.Intn(len(eightBallMessages))], nil
 }

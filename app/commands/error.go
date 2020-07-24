@@ -8,3 +8,8 @@ type CommandError struct {
 func (cErr *CommandError) Error() string {
 	return cErr.msg
 }
+
+// NewError creation for a Command
+func NewError(msg string) *CommandError {
+	return &CommandError{msg: msg}
+}

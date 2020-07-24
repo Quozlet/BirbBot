@@ -1,28 +1,28 @@
-package commands
+package simple
 
 import (
 	"math/rand"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/jackc/pgx/v4/pgxpool"
+	"quozlet.net/birbbot/app/commands"
 )
 
 // Choose is a command to randomly select a choice from a set of (space delimited) options
 type Choose struct{}
 
 // Check returns nil since this requires nothing
-func (c Choose) Check(*pgxpool.Pool) error {
+func (c Choose) Check() error {
 	return nil
 }
 
 // ProcessMessage processes a set of options to pick from, selecting one at random or returning an error if none are provided
-func (c Choose) ProcessMessage(m *discordgo.MessageCreate, _ *pgxpool.Pool) (string, error) {
+func (c Choose) ProcessMessage(m *discordgo.MessageCreate) (string, *commands.CommandError) {
 	splitContent := strings.Fields(m.Content)
 	if len(splitContent) == 1 {
-		return "", &CommandError{msg: "Choices, choices. " +
+		return "", commands.NewError("Choices, choices. " +
 			"Do I choose the nothing you provided, or the nothing I'm going to provide in return? " +
-			"_Hint_: Give me something to pick smarty pants"}
+			"_Hint_: Give me something to pick smarty pants")
 	}
 	options := splitContent[1:]
 	return options[rand.Intn(len(options))], nil
