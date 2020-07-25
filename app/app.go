@@ -120,6 +120,7 @@ func discoverCommand(dbPool *pgxpool.Pool) (map[string]*Command, []string) {
 		simple.Cowsay{},
 		simple.EightBall{},
 		simple.Search{},
+		simple.Wiki{},
 		weather.Weather{},
 		weather.Forecast{},
 	} {

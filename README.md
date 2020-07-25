@@ -76,6 +76,18 @@ Alternatively, `docker-compose` will take care of additional dependencies (like 
 - `docker-compose up`: Create and start containers
 - `docker-compose down`: Stop and remove containers
 
+## Transferring data
+
+The simplest way to transfer data is to make a backup of the database.
+
+**Assuming the Docker compose script set up the database:**
+
+Dump the whole database from a container:
+`docker exec <postgres container name> pg_dumpall -c -U <database username> > backup.sql`
+
+To restore the database on a machine:
+`cat backup.sql | docker exec -i <postgres container name> -U <database username>`
+
 ## Running the tests
 
 `go test`
