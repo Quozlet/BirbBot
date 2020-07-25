@@ -110,15 +110,16 @@ func commandHandler(s *discordgo.Session, m *discordgo.MessageCreate, dbPool *pg
 func discoverCommand(dbPool *pgxpool.Pool) (map[string]*Command, []string) {
 	commandMap := make(map[string]*Command)
 	for _, cmd := range []interface{}{
-		simple.EightBall{},
 		animal.Bird{},
 		animal.Cat{},
 		animal.Dog{},
-		simple.Choose{},
-		simple.Cowsay{},
 		noargs.Fortune{},
 		noargs.FortuneCookie{},
 		persistent.RSS{},
+		simple.Choose{},
+		simple.Cowsay{},
+		simple.EightBall{},
+		simple.Search{},
 		weather.Weather{},
 		weather.Forecast{},
 	} {
