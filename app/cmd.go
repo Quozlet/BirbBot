@@ -4,6 +4,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"quozlet.net/birbbot/app/commands"
+	"quozlet.net/birbbot/app/commands/recurring"
 )
 
 // Command is an interface that must be implemented for commands
@@ -43,4 +44,6 @@ type NoArgsCommand interface {
 type RecurringCommand interface {
 	// Check will check if there is any update. If an error occurs or there is no update, return nil
 	Check(*pgxpool.Pool) map[string][]string
+	// Frequency reports the preferred frequency for this command
+	Frequency() recurring.Frequency
 }

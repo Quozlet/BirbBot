@@ -4,10 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"reflect"
 	"strings"
-	"time"
-
-	"quozlet.net/birbbot/app/commands/recurring"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/jackc/pgx/v4/pgxpool"
@@ -16,13 +14,14 @@ import (
 	"quozlet.net/birbbot/app/commands/noargs/animal"
 	"quozlet.net/birbbot/app/commands/persistent"
 	"quozlet.net/birbbot/app/commands/persistent/weather"
+	"quozlet.net/birbbot/app/commands/recurring"
 	"quozlet.net/birbbot/app/commands/simple"
 )
 
-var recurringCommands []*RecurringCommand = []*RecurringCommand{}
+var recurringCommands map[recurring.Frequency][]*RecurringCommand = map[recurring.Frequency][]*RecurringCommand{}
 
 // Start a Discord session for a given token
-func Start(secret string, dbPool *pgxpool.Pool, ticker *time.Ticker) (*discordgo.Session, error) {
+func Start(secret string, dbPool *pgxpool.Pool, ticker *Timers) (*discordgo.Session, error) {
 	if len(secret) == 0 {
 		return nil, errors.New("Not attempting connection, secret seems incorrect")
 	}
@@ -41,22 +40,7 @@ func Start(secret string, dbPool *pgxpool.Pool, ticker *time.Ticker) (*discordgo
 		}
 		commandHandler(s, m, dbPool, commandMap, commandList)
 	})
-	go func() {
-		for {
-			select {
-			case <-ticker.C:
-				for _, cmd := range recurringCommands {
-					log.Printf("Checking %+v", *cmd)
-					pendingMsgs := (*cmd).Check(dbPool)
-					for channel, msgs := range pendingMsgs {
-						for _, msg := range msgs {
-							session.ChannelMessageSend(channel, msg)
-						}
-					}
-				}
-			}
-		}
-	}()
+	ticker.Start(recurringCommands, dbPool, session)
 	if err = session.Open(); err != nil {
 		log.Println("Failed to open WebSocket connection to Discord servers")
 		return nil, err
@@ -159,8 +143,9 @@ func discoverCommand(dbPool *pgxpool.Pool) (map[string]*Command, []string) {
 		} else {
 			recurringCmd, isRecurring := cmd.(RecurringCommand)
 			if isRecurring {
-				recurringCommands = append(recurringCommands, &recurringCmd)
-				log.Printf("Registered recurring command: +%v", recurringCommands)
+				freq := recurringCmd.Frequency()
+				recurringCommands[freq] = append(recurringCommands[freq], &recurringCmd)
+				log.Printf("Registered recurring command: %s", reflect.TypeOf(recurringCmd).Name())
 			}
 		}
 	}

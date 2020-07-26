@@ -7,9 +7,8 @@ import (
 	"log"
 	"net/url"
 
-	"quozlet.net/birbbot/app/commands/persistent"
-
 	"github.com/jackc/pgx/v4/pgxpool"
+	"quozlet.net/birbbot/app/commands/persistent"
 )
 
 // SubCheck routines checks for new items in the feed
@@ -76,4 +75,9 @@ func (s SubCheck) Check(dbPool *pgxpool.Pool) map[string][]string {
 		return nil
 	}
 	return pendingMessages
+}
+
+// Frequency reports that subscriptions should be checked hourly
+func (s SubCheck) Frequency() Frequency {
+	return Hourly
 }
