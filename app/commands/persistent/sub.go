@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
-const subTableDefinition string = "CREATE TABLE IF NOT EXISTS Subscriptions (FeedID INTEGER PRIMARY KEY REFERENCES Feeds(ID), Channel TEXT UNIQUE NOT NULL)"
+const subTableDefinition string = "CREATE TABLE IF NOT EXISTS Subscriptions (FeedID INTEGER PRIMARY KEY REFERENCES Feeds(ID), Channel TEXT NOT NULL)"
 const subInsert string = "INSERT INTO Subscriptions(FeedID, Channel) VALUES ($1, $2) ON CONFLICT (FeedID) DO UPDATE SET Channel=excluded.Channel"
 const subList string = "SELECT Channel FROM Subscriptions WHERE FeedID=$1"
 
