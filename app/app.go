@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
+
+	"quozlet.net/birbbot/app/commands/recurring"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/jackc/pgx/v4/pgxpool"
@@ -16,8 +19,10 @@ import (
 	"quozlet.net/birbbot/app/commands/simple"
 )
 
+var recurringCommands []*RecurringCommand = []*RecurringCommand{}
+
 // Start a Discord session for a given token
-func Start(secret string, dbPool *pgxpool.Pool) (*discordgo.Session, error) {
+func Start(secret string, dbPool *pgxpool.Pool, ticker *time.Ticker) (*discordgo.Session, error) {
 	if len(secret) == 0 {
 		return nil, errors.New("Not attempting connection, secret seems incorrect")
 	}
@@ -36,6 +41,22 @@ func Start(secret string, dbPool *pgxpool.Pool) (*discordgo.Session, error) {
 		}
 		commandHandler(s, m, dbPool, commandMap, commandList)
 	})
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				for _, cmd := range recurringCommands {
+					log.Printf("Checking %+v", *cmd)
+					pendingMsgs := (*cmd).Check(dbPool)
+					for channel, msgs := range pendingMsgs {
+						for _, msg := range msgs {
+							session.ChannelMessageSend(channel, msg)
+						}
+					}
+				}
+			}
+		}
+	}()
 	if err = session.Open(); err != nil {
 		log.Println("Failed to open WebSocket connection to Discord servers")
 		return nil, err
@@ -116,6 +137,8 @@ func discoverCommand(dbPool *pgxpool.Pool) (map[string]*Command, []string) {
 		noargs.Fortune{},
 		noargs.FortuneCookie{},
 		persistent.RSS{},
+		persistent.Sub{},
+		recurring.SubCheck{},
 		simple.Choose{},
 		simple.Cowsay{},
 		simple.EightBall{},
@@ -132,6 +155,12 @@ func discoverCommand(dbPool *pgxpool.Pool) (map[string]*Command, []string) {
 				} else {
 					log.Printf("Not registering %s (doesn't start with '!')", alias)
 				}
+			}
+		} else {
+			recurringCmd, isRecurring := cmd.(RecurringCommand)
+			if isRecurring {
+				recurringCommands = append(recurringCommands, &recurringCmd)
+				log.Printf("Registered recurring command: +%v", recurringCommands)
 			}
 		}
 	}
@@ -164,8 +193,8 @@ func isValidCommand(command *Command, dbPool *pgxpool.Pool) bool {
 			return false
 		}
 	} else {
-		log.Printf("%v was recognized as a command, but does not implement a required interface."+
-			" It is therefore ignored", command)
+		log.Printf("%+v was recognized as a command, but does not implement a required interface."+
+			" It is therefore ignored", *command)
 		return false
 	}
 	return true

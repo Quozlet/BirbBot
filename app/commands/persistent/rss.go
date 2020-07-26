@@ -20,8 +20,12 @@ import (
 const rssTableDefinition string = "CREATE TABLE IF NOT EXISTS Feeds (ID SERIAL PRIMARY KEY, Title TEXT NOT NULL, URL TEXT UNIQUE NOT NULL, LastItemHash BYTEA)"
 const rssNewFeed string = "INSERT INTO Feeds(Title, URL, LastItemHash) VALUES ($1, $2, $3) ON CONFLICT (URL) DO NOTHING"
 const rssList string = "SELECT ID, Title, URL, LastItemHash FROM Feeds"
-const rssSelect string = "SELECT Title, URL, LastItemHash FROM Feeds WHERE ID = $1"
-const rssUpdateLastItem string = "UPDATE Feeds SET LastItemHash = $1 WHERE ID = $2"
+
+// RSSSelect an RSS feed by ID
+const RSSSelect string = "SELECT Title, URL, LastItemHash FROM Feeds WHERE ID = $1"
+
+// RSSUpdateLastItem with a new hash
+const RSSUpdateLastItem string = "UPDATE Feeds SET LastItemHash = $1 WHERE ID = $2"
 
 // RSS is a command to fetch an RSS feed for validation
 type RSS struct{}
@@ -120,7 +124,7 @@ func fetchLatest(args []string, dbPool *pgxpool.Pool) (string, *commands.Command
 		log.Println(err)
 		return "", commands.NewError("This isn't good. Somehow an invalid feed URL was saved into the database for this ID")
 	}
-	feed, err := refreshFeed(url)
+	feed, err := RefreshFeed(url)
 	if err != nil {
 		log.Println(err)
 		return "", commands.NewError("Tried to fetch the feed, but some error occurred reading it")
@@ -128,7 +132,7 @@ func fetchLatest(args []string, dbPool *pgxpool.Pool) (string, *commands.Command
 	if len(feed.Items) == 0 {
 		return "", commands.NewError("Successfully fetched the feed, but it looks like it's empty")
 	}
-	latest := stringifyItem(feed.Items[0])
+	latest := StringifyItem(feed.Items[0])
 	sha := sha512.New()
 	_, err = sha.Write([]byte(latest))
 	if err != nil {
@@ -138,7 +142,7 @@ func fetchLatest(args []string, dbPool *pgxpool.Pool) (string, *commands.Command
 	}
 	hash := sha.Sum(nil)
 	if fmt.Sprintf("%x", hash) != fmt.Sprintf("%x", info.LastItem) {
-		tag, err := dbPool.Exec(context.Background(), rssUpdateLastItem, hash, id)
+		tag, err := dbPool.Exec(context.Background(), RSSUpdateLastItem, hash, id)
 		if err != nil {
 			log.Println(err)
 			return "", commands.NewError("Internal error." +
@@ -157,7 +161,7 @@ func storeNewFeed(userMsg string, dbPool *pgxpool.Pool) (string, *commands.Comma
 		return "", commands.NewError(fmt.Sprintf("%s doesn't seem to be a valid URL", userMsg))
 	}
 	url.Scheme = "https"
-	feed, err := refreshFeed(url)
+	feed, err := RefreshFeed(url)
 	if err != nil {
 		log.Println(err)
 		return "", commands.NewError("Tried to fetch the feed, but some error occurred reading it")
@@ -176,18 +180,19 @@ func storeNewFeed(userMsg string, dbPool *pgxpool.Pool) (string, *commands.Comma
 
 // CommandList returns a list of aliases for the RSS Command
 func (r RSS) CommandList() []string {
-	return []string{"!sub", "!rss"}
+	return []string{"!rss"}
 }
 
 // Help returns the help message for the RSS Command
 func (r RSS) Help() string {
 	return "Subscribes to an RSS feed\n" +
-		"- `!rss`/`!sub list` lists all subscribed RSS feeds\n" +
-		"- `!rss`/`!sub find <id>` finds an RSS feed by it's numerical ID\n" +
-		"- `!rss`/`!sub latest <id>` re-fetches the latest element of the feed and (if it hasn't already been posted) posts it"
+		"- `!rss list` lists all subscribed RSS feeds\n" +
+		"- `!rss find <id>` finds an RSS feed by it's numerical ID\n" +
+		"- `!rss latest <id>` re-fetches the latest element of the feed and (if it hasn't already been posted) posts it"
 }
 
-func stringifyItem(item *gofeed.Item) string {
+// StringifyItem returns a string representation of an RSS Feed item
+func StringifyItem(item *gofeed.Item) string {
 	title := html2text.HTML2Text(item.Title)
 	secondary := item.Link
 	if len(secondary) == 0 {
@@ -200,7 +205,8 @@ func stringifyItem(item *gofeed.Item) string {
 	return fmt.Sprintf("**%s**\n%s", title, secondary)
 }
 
-func refreshFeed(url *url.URL) (*gofeed.Feed, error) {
+// RefreshFeed fetches a given RSS feed
+func RefreshFeed(url *url.URL) (*gofeed.Feed, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	fp := gofeed.NewParser()
@@ -247,7 +253,7 @@ func selectFeedDB(dbPool *pgxpool.Pool, id int64) (*feedInfo, error) {
 	var title string
 	var url string
 	var lastItem []byte
-	if err := dbPool.QueryRow(context.Background(), rssSelect, id).Scan(&title, &url, &lastItem); err != nil {
+	if err := dbPool.QueryRow(context.Background(), RSSSelect, id).Scan(&title, &url, &lastItem); err != nil {
 		return nil, err
 	}
 	return &feedInfo{ID: id, Title: title, URL: url, LastItem: lastItem}, nil

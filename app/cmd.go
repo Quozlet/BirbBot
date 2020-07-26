@@ -37,3 +37,10 @@ type NoArgsCommand interface {
 	// ProcessMessage processes all additional arguments to the command (split on whitespace)
 	ProcessMessage() (string, *commands.CommandError)
 }
+
+// RecurringCommand will be run on a recurring basis, and return a map of channels to messages to post
+// Note: It is not explicitly invoked, and some other command should handle populating data for it
+type RecurringCommand interface {
+	// Check will check if there is any update. If an error occurs or there is no update, return nil
+	Check(*pgxpool.Pool) map[string][]string
+}

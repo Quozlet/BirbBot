@@ -30,7 +30,9 @@ func main() {
 		return
 	}
 	defer dbPool.Close()
-	session, err := app.Start(os.Getenv("DISCORD_SECRET"), dbPool)
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+	session, err := app.Start(os.Getenv("DISCORD_SECRET"), dbPool, ticker)
 	defer func() {
 		// If a session is established, close it properly before exiting
 		if session != nil {
