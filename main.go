@@ -30,7 +30,11 @@ func main() {
 		return
 	}
 	defer dbPool.Close()
-	ticker := app.Timers{}
+	ticker := app.Timers{
+		Daily:      time.NewTicker(time.Hour * 24),
+		Hourly:     time.NewTicker(time.Hour),
+		HalfHourly: time.NewTicker(time.Minute * 30),
+		Minutely:   time.NewTicker(time.Minute)}
 	defer ticker.StopAll()
 	session, err := app.Start(os.Getenv("DISCORD_SECRET"), dbPool, &ticker)
 	defer func() {

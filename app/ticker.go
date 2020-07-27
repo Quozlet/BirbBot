@@ -20,49 +20,24 @@ type Timers struct {
 
 // Start looking for new messages to post at all the supported intervals
 func (t Timers) Start(recurringCommandMap map[recurring.Frequency][]*RecurringCommand, dbPool *pgxpool.Pool, session *discordgo.Session) {
-	t.Daily = time.NewTicker(time.Hour * 24)
-	t.Hourly = time.NewTicker(time.Hour)
-	t.HalfHourly = time.NewTicker(time.Minute * 30)
-	t.Minutely = time.NewTicker(time.Minute)
-	for freq, cmds := range recurringCommandMap {
-		switch freq {
-		case recurring.Daily:
-			go func() {
-				select {
-				case <-t.Daily.C:
-					log.Println("Daily check ran")
-					processRecurringMsg(cmds, dbPool, session)
-				}
-			}()
-
-		case recurring.Hourly:
-			go func() {
-				select {
-				case <-t.Hourly.C:
-					log.Println("Hourly check ran")
-					processRecurringMsg(cmds, dbPool, session)
-				}
-			}()
-
-		case recurring.HalfHourly:
-			go func() {
-				select {
-				case <-t.HalfHourly.C:
-					log.Println("Half-hourly check ran")
-					processRecurringMsg(cmds, dbPool, session)
-				}
-			}()
-
-		case recurring.Minutely:
-			go func() {
-				select {
-				case <-t.Minutely.C:
-					log.Println("Minutely check ran")
-					processRecurringMsg(cmds, dbPool, session)
-				}
-			}()
+	go func() {
+		for {
+			select {
+			case <-t.Daily.C:
+				log.Println("Daily check ran")
+				processRecurringMsg(recurringCommandMap[recurring.Daily], dbPool, session)
+			case <-t.Hourly.C:
+				log.Println("Hourly check ran")
+				processRecurringMsg(recurringCommandMap[recurring.Hourly], dbPool, session)
+			case <-t.HalfHourly.C:
+				log.Println("Half-hourly check ran")
+				processRecurringMsg(recurringCommandMap[recurring.HalfHourly], dbPool, session)
+			case <-t.Minutely.C:
+				log.Println("Minutely check ran")
+				processRecurringMsg(recurringCommandMap[recurring.Minutely], dbPool, session)
+			}
 		}
-	}
+	}()
 }
 
 // StopAll timers so no more events are sent on their channels
