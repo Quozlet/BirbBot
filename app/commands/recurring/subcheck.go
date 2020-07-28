@@ -67,7 +67,7 @@ func (s SubCheck) Check(dbPool *pgxpool.Pool) map[string][]string {
 				continue
 			}
 			log.Println(tag)
-			pendingMessages[channel] = append(pendingMessages[channel], latest)
+			pendingMessages[channel] = append(pendingMessages[channel], fmt.Sprintf("%s\n%s", title, latest))
 		}
 	}
 	if err := rows.Err(); err != nil {

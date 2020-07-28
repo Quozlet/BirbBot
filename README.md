@@ -86,7 +86,7 @@ Dump the whole database from a container:
 `docker exec <postgres container name> pg_dumpall -c -U <database username> > backup.sql`
 
 To restore the database on a machine:
-`cat backup.sql | docker exec -i <postgres container name> -U <database username>`
+`cat backup.sql | docker exec -i <postgres container name> psql -U <database username>`
 
 ## Running the tests
 
