@@ -20,7 +20,7 @@ import (
 // TODO: Finalize schema with RSS/Sub combined w/ proper handling of CASCADE etc.
 const rssTableDefinition string = "CREATE TABLE IF NOT EXISTS Feeds (ID SERIAL PRIMARY KEY, Title TEXT NOT NULL, URL TEXT UNIQUE NOT NULL, LastItemHash BYTEA)"
 const rssNewFeed string = "INSERT INTO Feeds(Title, URL, LastItemHash) VALUES ($1, $2, $3) ON CONFLICT (URL) DO NOTHING"
-const rssList string = "SELECT ID, Title, URL, LastItemHash FROM Feeds"
+const rssList string = "SELECT ID, Title, URL, LastItemHash FROM Feeds ORDER BY ID"
 
 // RSSSelect an RSS feed by ID
 const RSSSelect string = "SELECT Title, URL, LastItemHash FROM Feeds WHERE ID = $1"
