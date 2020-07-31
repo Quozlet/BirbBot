@@ -2,6 +2,7 @@ package simple
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -44,17 +45,18 @@ func (i Issue) Check() error {
 		log.Println(err)
 		return err
 	}
-	log.Printf("%+v", repoInfo)
 	repositoryID = repoInfo.Repository.ID
 	bugLabelID = repoInfo.Repository.Label.ID
+	if repositoryID == "" || bugLabelID == "" {
+		return errors.New("Failed to get necessary IDs")
+	}
 	return nil
 }
 
 // ProcessMessage will attempt to create an issue with the given text
 func (i Issue) ProcessMessage(m *discordgo.MessageCreate) (string, *commands.CommandError) {
 	content := strings.Join(strings.Fields(m.Content)[1:], " ")
-	lines := strings.Split(content, "\n")
-	if len(lines) == 0 {
+	if len(content) == 0 {
 		return "", commands.NewError("Cannot make an issue with no information provided")
 	}
 	req := graphql.NewRequest(`
@@ -66,11 +68,12 @@ func (i Issue) ProcessMessage(m *discordgo.MessageCreate) (string, *commands.Com
 		  }
 		  clientMutationId
 		}
-	}	  
+	}
 	`)
 	req.Var("repository", repositoryID)
-	req.Var("title", strings.Split(lines[0], ".")[0])
-	req.Var("body", content)
+	issue := strings.Split(content, ".")
+	req.Var("title", issue[0])
+	req.Var("body", strings.TrimSpace(strings.Join(issue[1:], "")))
 	label := []string{}
 	if strings.Fields(m.Content)[0] == "!bug" {
 		label = append(label, bugLabelID)

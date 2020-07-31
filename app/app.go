@@ -163,19 +163,20 @@ func isValidCommand(command *Command, dbPool *pgxpool.Pool) bool {
 	simpleCmd, isSimple := (*command).(SimpleCommand)
 	noArgsCmd, hasNoArgs := (*command).(NoArgsCommand)
 	persistentCmd, isPersistent := (*command).(PersistentCommand)
+	commandName := reflect.TypeOf(*command).Name()
 	if isSimple {
 		if err := simpleCmd.Check(); err != nil {
-			log.Println(err)
+			log.Printf("%s recognized but not registered: %s", commandName, err)
 			return false
 		}
 	} else if hasNoArgs {
 		if err := noArgsCmd.Check(); err != nil {
-			log.Println(err)
+			log.Printf("%s recognized but not registered: %s", commandName, err)
 			return false
 		}
 	} else if isPersistent {
 		if err := persistentCmd.Check(dbPool); err != nil {
-			log.Println(err)
+			log.Printf("%s recognized but not registered: %s", commandName, err)
 			return false
 		}
 	} else {
@@ -197,7 +198,7 @@ func processMessage(m *discordgo.MessageCreate, command *Command, dbPool *pgxpoo
 	} else if isPersistent {
 		return persistentCmd.ProcessMessage(m, dbPool)
 	} else {
-		log.Fatalf("Got %v, an invalid command!", command)
+		log.Fatalf("Got %s, an invalid command!", reflect.TypeOf(*command).Name())
 		return "", commands.NewError("A critical error occurred processing this message")
 	}
 }
