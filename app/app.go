@@ -126,6 +126,7 @@ func discoverCommand(dbPool *pgxpool.Pool) (map[string]*Command, []string) {
 		simple.Choose{},
 		simple.Cowsay{},
 		simple.EightBall{},
+		simple.Issue{},
 		simple.Search{},
 		simple.Wiki{},
 		weather.Weather{},
@@ -178,8 +179,8 @@ func isValidCommand(command *Command, dbPool *pgxpool.Pool) bool {
 			return false
 		}
 	} else {
-		log.Printf("%+v was recognized as a command, but does not implement a required interface."+
-			" It is therefore ignored", *command)
+		log.Printf("%s was recognized as a command, but does not implement a required interface."+
+			" It is therefore ignored", reflect.TypeOf(*command).Name())
 		return false
 	}
 	return true

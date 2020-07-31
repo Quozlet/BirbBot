@@ -24,17 +24,25 @@ func (t Timers) Start(recurringCommandMap map[recurring.Frequency][]*RecurringCo
 		for {
 			select {
 			case <-t.Daily.C:
-				log.Println("Daily check ran")
-				processRecurringMsg(recurringCommandMap[recurring.Daily], dbPool, session)
+				if len(recurringCommandMap[recurring.Daily]) != 0 {
+					log.Println("Daily check ran")
+					processRecurringMsg(recurringCommandMap[recurring.Daily], dbPool, session)
+				}
 			case <-t.Hourly.C:
-				log.Println("Hourly check ran")
-				processRecurringMsg(recurringCommandMap[recurring.Hourly], dbPool, session)
+				if len(recurringCommandMap[recurring.Hourly]) != 0 {
+					log.Println("Hourly check ran")
+					processRecurringMsg(recurringCommandMap[recurring.Hourly], dbPool, session)
+				}
 			case <-t.HalfHourly.C:
-				log.Println("Half-hourly check ran")
-				processRecurringMsg(recurringCommandMap[recurring.HalfHourly], dbPool, session)
+				if len(recurringCommandMap[recurring.HalfHourly]) != 0 {
+					log.Println("Half-hourly check ran")
+					processRecurringMsg(recurringCommandMap[recurring.HalfHourly], dbPool, session)
+				}
 			case <-t.Minutely.C:
-				log.Println("Minutely check ran")
-				processRecurringMsg(recurringCommandMap[recurring.Minutely], dbPool, session)
+				if len(recurringCommandMap[recurring.Minutely]) != 0 {
+					log.Println("Minutely check ran")
+					processRecurringMsg(recurringCommandMap[recurring.Minutely], dbPool, session)
+				}
 			}
 		}
 	}()
