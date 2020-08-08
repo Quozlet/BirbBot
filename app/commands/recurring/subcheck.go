@@ -52,9 +52,9 @@ func (s SubCheck) Check(dbPool *pgxpool.Pool) map[string][]string {
 			log.Printf("Fetched %s ok, but no items in feed", feedURL)
 			continue
 		}
-		latest := persistent.StringifyItem(feed.Items[0])
+		articleTitle, secondary := persistent.StringifyItem(feed.Items[0])
 		sha := sha512.New()
-		_, err = sha.Write([]byte(latest))
+		_, err = sha.Write([]byte(secondary))
 		if err != nil {
 			log.Println(err)
 			return nil
@@ -67,7 +67,7 @@ func (s SubCheck) Check(dbPool *pgxpool.Pool) map[string][]string {
 				continue
 			}
 			log.Println(tag)
-			pendingMessages[channel] = append(pendingMessages[channel], fmt.Sprintf("%s\n%s", title, latest))
+			pendingMessages[channel] = append(pendingMessages[channel], fmt.Sprintf("%s\n**%s**\n%s", title, articleTitle, secondary))
 		}
 	}
 	if err := rows.Err(); err != nil {

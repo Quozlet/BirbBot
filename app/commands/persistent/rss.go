@@ -133,9 +133,9 @@ func fetchLatest(args []string, dbPool *pgxpool.Pool) (string, *commands.Command
 	if len(feed.Items) == 0 {
 		return "", commands.NewError("Successfully fetched the feed, but it looks like it's empty")
 	}
-	latest := StringifyItem(feed.Items[0])
+	title, secondary := StringifyItem(feed.Items[0])
 	sha := sha512.New()
-	_, err = sha.Write([]byte(latest))
+	_, err = sha.Write([]byte(secondary))
 	if err != nil {
 		log.Println(err)
 		return "", commands.NewError("Internal error." +
@@ -150,7 +150,7 @@ func fetchLatest(args []string, dbPool *pgxpool.Pool) (string, *commands.Command
 				" I'll probably be confused about the latest item in the feed until it's fetched again")
 		}
 		log.Println(tag)
-		return fmt.Sprintf("%s: %s", info.Title, latest), nil
+		return fmt.Sprintf("%s: %s", info.Title, fmt.Sprintf("**%s**\n%s", title, secondary)), nil
 	}
 	return "Nothing new to report", nil
 }
@@ -193,7 +193,7 @@ func (r RSS) Help() string {
 }
 
 // StringifyItem returns a string representation of an RSS Feed item
-func StringifyItem(item *gofeed.Item) string {
+func StringifyItem(item *gofeed.Item) (string, string) {
 	title := html2text.HTML2Text(item.Title)
 	secondary := item.Link
 	if len(secondary) == 0 {
@@ -203,7 +203,7 @@ func StringifyItem(item *gofeed.Item) string {
 			secondary = html2text.HTML2Text(item.Description)
 		}
 	}
-	return fmt.Sprintf("**%s**\n%s", title, secondary)
+	return title, secondary
 }
 
 // RefreshFeed fetches a given RSS feed
