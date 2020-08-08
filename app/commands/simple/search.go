@@ -12,7 +12,7 @@ import (
 	"quozlet.net/birbbot/app/commands"
 )
 
-const searchURL = "https://searx.xyz/search?format=json"
+const searchURL = "https://searx.xyz/search?format=json&lang=en"
 
 // Search is a command to make a websearch
 type Search struct{}
