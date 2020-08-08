@@ -12,10 +12,14 @@ import (
 
 // Timers at which RecurringCommand intervals are supported
 type Timers struct {
-	Daily      *time.Ticker
-	Hourly     *time.Ticker
-	HalfHourly *time.Ticker
-	Minutely   *time.Ticker
+	Daily           *time.Ticker
+	Hourly          *time.Ticker
+	Minutely        *time.Ticker
+	FiveMinutely    *time.Ticker
+	TenMinutely     *time.Ticker
+	QuarterHourly   *time.Ticker
+	HalfHourly      *time.Ticker
+	QuarterToHourly *time.Ticker
 }
 
 // Start looking for new messages to post at all the supported intervals
