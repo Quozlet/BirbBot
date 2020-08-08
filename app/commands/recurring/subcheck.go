@@ -60,7 +60,7 @@ func (s SubCheck) Check(dbPool *pgxpool.Pool) map[string][]string {
 			}
 			urls[item.Description] = struct{}{}
 		}
-		tag, err := dbPool.Exec(context.Background(), persistent.RSSUpdateLastItem, urls)
+		tag, err := dbPool.Exec(context.Background(), persistent.RSSUpdateLastItem, urls, id)
 		if err != nil {
 			log.Println(err)
 		}
