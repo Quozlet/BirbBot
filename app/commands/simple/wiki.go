@@ -34,6 +34,7 @@ func (w Wiki) ProcessMessage(m *discordgo.MessageCreate) (string, *commands.Comm
 	}
 	title := url.QueryEscape(strings.Join(splitContent[1:], "_"))
 	wikiURL, err := url.Parse(wikiURL + title)
+	log.Println(wikiURL)
 	if err != nil {
 		log.Println(err)
 		return "", commands.NewError("Failed to make that query into a request")
@@ -48,6 +49,10 @@ func (w Wiki) ProcessMessage(m *discordgo.MessageCreate) (string, *commands.Comm
 	if err := json.NewDecoder(response.Body).Decode(&wiki); err != nil {
 		log.Println(err)
 		return "", commands.NewError("Heard back from Wikipedia, but couldn't process the response")
+	}
+	if len(wiki.Description) == 0 || len(wiki.ContentURLs.Desktop.Page) == 0 {
+		log.Printf("+%v",wiki)
+		return "", commands.NewError("Didn't find a matching Wikipedia article")
 	}
 	return fmt.Sprintf("%s: %s", wiki.Description, wiki.ContentURLs.Desktop.Page), nil
 
