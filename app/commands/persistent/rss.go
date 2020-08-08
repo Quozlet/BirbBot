@@ -24,10 +24,6 @@ const rssList string = "SELECT ID, Title, URL, LastItems FROM Feeds ORDER BY ID"
 // RSSSelect an RSS feed by ID
 const RSSSelect string = "SELECT Title, URL, LastItems FROM Feeds WHERE ID = $1"
 
-// DB Migration
-const rssTableMigrationDrop string = "ALTER TABLE Feeds DROP COLUMN LastItemHash CASCADE"
-const rssTableMigrationAdd string = "ALTER TABLE Feeds ADD COLUMN LastItems JSONB NOT NULL DEFAULT '{}'"
-
 // RSSUpdateLastItem with a new hash
 const RSSUpdateLastItem string = "UPDATE Feeds SET LastItems = $1 WHERE ID = $2"
 
@@ -40,18 +36,6 @@ func (r RSS) Check(dbPool *pgxpool.Pool) error {
 	if err != nil {
 		return err
 	}
-	drop, err := dbPool.Exec(context.Background(), rssTableMigrationDrop)
-	if err != nil {
-		log.Printf("WARNING! Couldn't drop the table: %s", rssTableMigrationDrop)
-		return err
-	}
-	log.Println(drop)
-	add, err := dbPool.Exec(context.Background(), rssTableMigrationAdd)
-	if err != nil {
-		log.Printf("WARNING! Couldn't add the title: %s", rssTableMigrationAdd)
-		return err
-	}
-	log.Println(add)
 	log.Printf("RSS: %s", tag)
 	return nil
 }
