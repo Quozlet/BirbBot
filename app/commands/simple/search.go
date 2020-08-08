@@ -27,10 +27,10 @@ func (s Search) Check() error {
 }
 
 // ProcessMessage with search query and return first result
-func (s Search) ProcessMessage(m *discordgo.MessageCreate) (string, *commands.CommandError) {
+func (s Search) ProcessMessage(m *discordgo.MessageCreate) ([]string, *commands.CommandError) {
 	splitContent := strings.Fields(m.Content)
 	if len(splitContent) == 1 {
-		return "", commands.NewError("Can't search for nothing." +
+		return nil, commands.NewError("Can't search for nothing." +
 			" I mean, I can search for 'nothing', but you gave me nothing to search..." +
 			" Listen, you get it." +
 			" Provide some input next time")
@@ -38,7 +38,7 @@ func (s Search) ProcessMessage(m *discordgo.MessageCreate) (string, *commands.Co
 	searchURL, err := url.Parse(searchURL)
 	if err != nil {
 		log.Println(err)
-		return "", commands.NewError("Failed to make that query into searchable text")
+		return nil, commands.NewError("Failed to make that query into searchable text")
 	}
 	q := searchURL.Query()
 	q.Set("q", url.QueryEscape(strings.Join(splitContent[1:], " ")))
@@ -46,28 +46,28 @@ func (s Search) ProcessMessage(m *discordgo.MessageCreate) (string, *commands.Co
 	request, err := http.NewRequest("GET", searchURL.String(), nil)
 	if err != nil {
 		log.Println(err)
-		return "", commands.NewError("Failure occurred while constructing request")
+		return nil, commands.NewError("Failure occurred while constructing request")
 	}
 	request.Header.Set("User-Agent", "birbbot")
 	log.Printf("Searching %s", searchURL.String())
 	response, err := (&http.Client{}).Do(request)
 	if err != nil {
 		log.Println(err)
-		return "", commands.NewError("Failed to hear back from the server")
+		return nil, commands.NewError("Failed to hear back from the server")
 	}
 	defer response.Body.Close()
 	search := SearchResponse{}
 	if err := json.NewDecoder(response.Body).Decode(&search); err != nil {
 		log.Println(err)
-		return "", commands.NewError("Heard back, but couldn't process the response")
+		return nil, commands.NewError("Heard back, but couldn't process the response")
 	}
 	if len(search.Results) == 0 {
-		return "", commands.NewError("No results found")
+		return nil, commands.NewError("No results found")
 	}
-	return fmt.Sprintf("**%s**\n%s\n%s",
+	return []string{fmt.Sprintf("**%s**\n%s\n%s",
 		search.Results[0].Title,
 		search.Results[0].Content,
-		search.Results[0].URL), nil
+		search.Results[0].URL)}, nil
 }
 
 // CommandList returns a list of aliases for the Search Command

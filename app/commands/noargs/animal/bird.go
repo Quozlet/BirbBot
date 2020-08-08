@@ -20,7 +20,7 @@ func (b Bird) Check() error {
 }
 
 // ProcessMessage for a Bird Command (will return the URL for a random bird image)
-func (b Bird) ProcessMessage() (string, *commands.CommandError) {
+func (b Bird) ProcessMessage() ([]string, *commands.CommandError) {
 	return fetchAnimal(birdURL)
 }
 

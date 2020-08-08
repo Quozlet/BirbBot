@@ -31,25 +31,25 @@ func (s Sub) Check(dbPool *pgxpool.Pool) error {
 }
 
 // ProcessMessage will create an association between an RSS feed and channel
-func (s Sub) ProcessMessage(m *discordgo.MessageCreate, dbPool *pgxpool.Pool) (string, *commands.CommandError) {
+func (s Sub) ProcessMessage(m *discordgo.MessageCreate, dbPool *pgxpool.Pool) ([]string, *commands.CommandError) {
 	splitContent := strings.Fields(m.Content)
 	if len(splitContent) != 3 {
-		return "", commands.NewError("Require 2 fields, the ID, and channel to subscribe it to")
+		return nil, commands.NewError("Require 2 fields, the ID, and channel to subscribe it to")
 	}
 	id, err := strconv.ParseInt(splitContent[1], 0, 64)
 	if err != nil {
 		log.Println(err)
-		return "", commands.NewError(fmt.Sprintf("%s is not a valid ID, so I can't look up a feed using it", splitContent[1]))
+		return nil, commands.NewError(fmt.Sprintf("%s is not a valid ID, so I can't look up a feed using it", splitContent[1]))
 	}
 	channelID := string([]rune(splitContent[2])[2:20])
 	tag, err := dbPool.Exec(context.Background(), subInsert, id, channelID)
 	if err != nil {
 		log.Println(err)
-		return "", commands.NewError("Failed to associate the feed with the channel." +
+		return nil, commands.NewError("Failed to associate the feed with the channel." +
 			" Check that the ID exists")
 	}
 	log.Printf("%s (actually inserted %d, %s)", tag, id, channelID)
-	return fmt.Sprintf("Got it! Associated %d to %s", id, strings.Fields(m.Content)[2]), nil
+	return []string{fmt.Sprintf("Got it! Associated %d to %s", id, strings.Fields(m.Content)[2])}, nil
 }
 
 // Help returns the help message for the RSS Command

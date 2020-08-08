@@ -20,7 +20,7 @@ func (c Cat) Check() error {
 }
 
 // ProcessMessage for a Cat Command (will return the URL for a random cat image)
-func (c Cat) ProcessMessage() (string, *commands.CommandError) {
+func (c Cat) ProcessMessage() ([]string, *commands.CommandError) {
 	return fetchAnimal(catURL)
 }
 

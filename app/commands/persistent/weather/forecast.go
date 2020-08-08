@@ -18,14 +18,14 @@ func (f Forecast) Check(dbPool *pgxpool.Pool) error {
 }
 
 // ProcessMessage processes a given message and fetches the weather for the location specified for the day specified
-func (f Forecast) ProcessMessage(m *discordgo.MessageCreate, dbPool *pgxpool.Pool) (string, *commands.CommandError) {
+func (f Forecast) ProcessMessage(m *discordgo.MessageCreate, dbPool *pgxpool.Pool) ([]string, *commands.CommandError) {
 	message := strings.Fields(m.Content)[1:]
 	// Start of extended forcast (lines 7-17)
 	start, end := 7, 17
 	url, err := createWeatherURL(message, m.Author.ID, dbPool)
 	if err != nil {
 		log.Println(err)
-		return "", commands.NewError("Tried to create a plan to fetch the weather, but it failed")
+		return nil, commands.NewError("Tried to create a plan to fetch the weather, but it failed")
 	}
 	if len(message) != 0 {
 		log.Printf("Recognized variant %s, processing", message[0])
@@ -42,15 +42,15 @@ func (f Forecast) ProcessMessage(m *discordgo.MessageCreate, dbPool *pgxpool.Poo
 	}
 	if err != nil {
 		log.Println(err)
-		return "", commands.NewError("Failed to make a plan for getting the weather." +
+		return nil, commands.NewError("Failed to make a plan for getting the weather." +
 			" Try again later (if this occurred when you thought a location was set, it probably isn't)")
 	}
 	forecast, err := detailedWeather(url, start, end)
 	if err != nil {
 		log.Println(err)
-		return "", commands.NewError("Couldn't get the forecast for that location for some reason")
+		return nil, commands.NewError("Couldn't get the forecast for that location for some reason")
 	}
-	return forecast, nil
+	return []string{forecast}, nil
 }
 
 // CommandList returns a list of aliases for the Forecast Command

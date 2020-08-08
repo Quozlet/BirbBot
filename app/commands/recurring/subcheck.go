@@ -2,7 +2,6 @@ package recurring
 
 import (
 	"context"
-	"crypto/sha512"
 	"fmt"
 	"log"
 	"net/url"
@@ -34,8 +33,8 @@ func (s SubCheck) Check(dbPool *pgxpool.Pool) map[string][]string {
 		}
 		var title string
 		var feedURL string
-		var lastItem []byte
-		if err := dbPool.QueryRow(context.Background(), persistent.RSSSelect, id).Scan(&title, &feedURL, &lastItem); err != nil {
+		var lastItems map[string]struct{}
+		if err := dbPool.QueryRow(context.Background(), persistent.RSSSelect, id).Scan(&title, &feedURL, &lastItems); err != nil {
 			continue
 		}
 		parsedURL, err := url.Parse(feedURL)
@@ -52,23 +51,20 @@ func (s SubCheck) Check(dbPool *pgxpool.Pool) map[string][]string {
 			log.Printf("Fetched %s ok, but no items in feed", feedURL)
 			continue
 		}
-		articleTitle, secondary := persistent.StringifyItem(feed.Items[0])
-		sha := sha512.New()
-		_, err = sha.Write([]byte(secondary))
+		items := persistent.ReduceItem(feed.Items)
+		urls := make(map[string]struct{})
+		for _, item := range items {
+			_, contained := lastItems[item.Description]
+			if !contained {
+				pendingMessages[channel] = append(pendingMessages[channel], fmt.Sprintf("%s\n**%s**\n%s", title, item.Title, item.Description))
+			}
+			urls[item.Description] = struct{}{}
+		}
+		tag, err := dbPool.Exec(context.Background(), persistent.RSSUpdateLastItem, urls)
 		if err != nil {
 			log.Println(err)
-			return nil
 		}
-		hash := sha.Sum(nil)
-		if fmt.Sprintf("%x", hash) != fmt.Sprintf("%x", lastItem) {
-			tag, err := dbPool.Exec(context.Background(), persistent.RSSUpdateLastItem, hash, id)
-			if err != nil {
-				log.Println(err)
-				continue
-			}
-			log.Println(tag)
-			pendingMessages[channel] = append(pendingMessages[channel], fmt.Sprintf("%s\n**%s**\n%s", title, articleTitle, secondary))
-		}
+		log.Println(tag)
 	}
 	if err := rows.Err(); err != nil {
 		log.Println(err)
@@ -79,5 +75,5 @@ func (s SubCheck) Check(dbPool *pgxpool.Pool) map[string][]string {
 
 // Frequency reports that subscriptions should be checked hourly
 func (s SubCheck) Frequency() Frequency {
-	return Hourly
+	return HalfHourly
 }

@@ -53,7 +53,7 @@ func commandHandler(s *discordgo.Session, m *discordgo.MessageCreate, dbPool *pg
 	content := strings.Fields(strings.ToLower(m.Content))
 	cmd := commandMap[content[0]]
 	log.Printf("Ack %s: %s", m.Author.Username, m.Content)
-	response := func() string {
+	responses := func() []string {
 		if cmd != nil {
 			if err := s.MessageReactionAdd(m.ChannelID, m.Message.ID, "✅"); err != nil {
 				log.Println(err)
@@ -72,7 +72,7 @@ func commandHandler(s *discordgo.Session, m *discordgo.MessageCreate, dbPool *pg
 				if err := s.MessageReactionAdd(m.ChannelID, m.Message.ID, "❗"); err != nil {
 					log.Println(err)
 				}
-				return msgError.Error()
+				return []string{msgError.Error()}
 			}
 			log.Printf("Responded ok to %s: %s", m.Author.Username, m.Content)
 			return response
@@ -82,29 +82,31 @@ func commandHandler(s *discordgo.Session, m *discordgo.MessageCreate, dbPool *pg
 		switch content[0] {
 		case "!help":
 			if len(content[1:]) == 0 || commandMap["!"+content[1]] == nil {
-				return fmt.Sprintf("Available commands:\n`%s`,"+
+				return []string{fmt.Sprintf("Available commands:\n`%s`,"+
 					" `!license` (the software license that applies to this bot's source code),"+
 					" `!source` (a link to this bot's source code)\n\n"+
-					"(For more information on a specific command: `!help <command name>`)", strings.Join(commandList, "`, `"))
+					"(For more information on a specific command: `!help <command name>`)", strings.Join(commandList, "`, `"))}
 			}
-			return (*commandMap["!"+content[1]]).Help()
+			return []string{(*commandMap["!"+content[1]]).Help()}
 
 		case "!license":
-			return "This bot's source code is licensed under the The Open Software License 3.0 (https://spdx.org/licenses/OSL-3.0.html)"
+			return []string{"This bot's source code is licensed under the The Open Software License 3.0 (https://spdx.org/licenses/OSL-3.0.html)"}
 
 		case "!source":
-			return "https://github.com/Quozlet/BirbBot"
+			return []string{"https://github.com/Quozlet/BirbBot"}
 
 		default:
 			log.Printf("Unrecognized command: %s", m.Content)
-			return fmt.Sprintf("Unrecognized command: `%s`", content[0])
+			return []string{fmt.Sprintf("Unrecognized command: `%s`", content[0])}
 		}
 
 	}()
-	if len(response) != 0 {
-		_, err := s.ChannelMessageSend(m.ChannelID, response)
-		if err != nil {
-			log.Printf("Failed to respond: %s", err)
+	if len(responses) != 0 {
+		for _, response := range responses {
+			_, err := s.ChannelMessageSend(m.ChannelID, response)
+			if err != nil {
+				log.Printf("Failed to respond: %s", err)
+			}
 		}
 	}
 
@@ -187,7 +189,7 @@ func isValidCommand(command *Command, dbPool *pgxpool.Pool) bool {
 	return true
 }
 
-func processMessage(m *discordgo.MessageCreate, command *Command, dbPool *pgxpool.Pool) (string, *commands.CommandError) {
+func processMessage(m *discordgo.MessageCreate, command *Command, dbPool *pgxpool.Pool) ([]string, *commands.CommandError) {
 	simpleCmd, isSimple := (*command).(SimpleCommand)
 	noArgsCmd, hasNoArgs := (*command).(NoArgsCommand)
 	persistentCmd, isPersistent := (*command).(PersistentCommand)
@@ -199,6 +201,6 @@ func processMessage(m *discordgo.MessageCreate, command *Command, dbPool *pgxpoo
 		return persistentCmd.ProcessMessage(m, dbPool)
 	} else {
 		log.Fatalf("Got %s, an invalid command!", reflect.TypeOf(*command).Name())
-		return "", commands.NewError("A critical error occurred processing this message")
+		return nil, commands.NewError("A critical error occurred processing this message")
 	}
 }

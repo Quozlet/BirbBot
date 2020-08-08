@@ -27,34 +27,34 @@ func (w Wiki) Check() error {
 }
 
 // ProcessMessage searches for a Wikipedia article by title
-func (w Wiki) ProcessMessage(m *discordgo.MessageCreate) (string, *commands.CommandError) {
+func (w Wiki) ProcessMessage(m *discordgo.MessageCreate) ([]string, *commands.CommandError) {
 	splitContent := strings.Fields(m.Content)
 	if len(splitContent) == 1 {
-		return "", commands.NewError("You didn't provide anything to look for on Wikipedia")
+		return nil, commands.NewError("You didn't provide anything to look for on Wikipedia")
 	}
 	title := url.QueryEscape(strings.Join(splitContent[1:], "_"))
 	wikiURL, err := url.Parse(wikiURL + title)
 	log.Println(wikiURL)
 	if err != nil {
 		log.Println(err)
-		return "", commands.NewError("Failed to make that query into a request")
+		return nil, commands.NewError("Failed to make that query into a request")
 	}
 	response, err := http.Get(wikiURL.String())
 	if err != nil {
 		log.Println(err)
-		return "", commands.NewError("Didn't hear back from Wikipedia about that article")
+		return nil, commands.NewError("Didn't hear back from Wikipedia about that article")
 	}
 	defer response.Body.Close()
 	wiki := wikiResponse{}
 	if err := json.NewDecoder(response.Body).Decode(&wiki); err != nil {
 		log.Println(err)
-		return "", commands.NewError("Heard back from Wikipedia, but couldn't process the response")
+		return nil, commands.NewError("Heard back from Wikipedia, but couldn't process the response")
 	}
 	if len(wiki.Description) == 0 || len(wiki.ContentURLs.Desktop.Page) == 0 {
-		log.Printf("+%v",wiki)
-		return "", commands.NewError("Didn't find a matching Wikipedia article")
+		log.Printf("+%v", wiki)
+		return nil, commands.NewError("Didn't find a matching Wikipedia article")
 	}
-	return fmt.Sprintf("%s: %s", wiki.Description, wiki.ContentURLs.Desktop.Page), nil
+	return []string{fmt.Sprintf("%s: %s", wiki.Description, wiki.ContentURLs.Desktop.Page)}, nil
 
 }
 

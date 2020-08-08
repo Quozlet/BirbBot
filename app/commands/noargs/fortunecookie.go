@@ -22,14 +22,14 @@ func (fc FortuneCookie) Check() error {
 }
 
 // ProcessMessage returns a random fortune
-func (fc FortuneCookie) ProcessMessage() (string, *commands.CommandError) {
+func (fc FortuneCookie) ProcessMessage() ([]string, *commands.CommandError) {
 	fortune, err := exec.Command("fortune", "-a").Output()
 	if err != nil {
 		log.Println(err)
-		return "", commands.NewError("Doubt is not a pleasant condition, but... just kidding, I didn't get a fortune. " +
+		return nil, commands.NewError("Doubt is not a pleasant condition, but... just kidding, I didn't get a fortune. " +
 			"Guess the fortune teller fell asleep ¯\\_(ツ)_/¯")
 	}
-	return string(fortune), nil
+	return []string{string(fortune)}, nil
 }
 
 // CommandList returns a list of aliases for the FortuneCookie Command

@@ -20,7 +20,7 @@ type SimpleCommand interface {
 	// Check asserts all preconditions are met, and returns an error if they are not
 	Check() error
 	// ProcessMessage processes all additional arguments to the command (split on whitespace)
-	ProcessMessage(*discordgo.MessageCreate) (string, *commands.CommandError)
+	ProcessMessage(*discordgo.MessageCreate) ([]string, *commands.CommandError)
 }
 
 // PersistentCommand is a command that will persist some data into a database
@@ -28,7 +28,7 @@ type PersistentCommand interface {
 	// Check asserts all preconditions are met, and returns an error if they are not
 	Check(*pgxpool.Pool) error
 	// ProcessMessage processes all additional arguments to the command (split on whitespace)
-	ProcessMessage(*discordgo.MessageCreate, *pgxpool.Pool) (string, *commands.CommandError)
+	ProcessMessage(*discordgo.MessageCreate, *pgxpool.Pool) ([]string, *commands.CommandError)
 }
 
 // NoArgsCommand will always go through the same flow to response, irrespective of arguments
@@ -36,7 +36,7 @@ type NoArgsCommand interface {
 	// Check asserts all preconditions are met, and returns an error if they are not
 	Check() error
 	// ProcessMessage processes all additional arguments to the command (split on whitespace)
-	ProcessMessage() (string, *commands.CommandError)
+	ProcessMessage() ([]string, *commands.CommandError)
 }
 
 // RecurringCommand will be run on a recurring basis, and return a map of channels to messages to post

@@ -35,11 +35,11 @@ func (f Fortune) Check() error {
 }
 
 // ProcessMessage returns a random cow saying a random message. The provided arguments are ignored
-func (f Fortune) ProcessMessage() (string, *commands.CommandError) {
+func (f Fortune) ProcessMessage() ([]string, *commands.CommandError) {
 	fortune, err := exec.Command("fortune", "-a").Output()
 	if err != nil {
 		log.Println(err)
-		return "", commands.NewError("Doubt is not a pleasant condition, but... just kidding, I didn't get a fortune. " +
+		return nil, commands.NewError("Doubt is not a pleasant condition, but... just kidding, I didn't get a fortune. " +
 			" Guess the fortune teller fell asleep ¯\\_(ツ)_/¯")
 	}
 	// OK to run user provided input
@@ -47,10 +47,10 @@ func (f Fortune) ProcessMessage() (string, *commands.CommandError) {
 	cowsay, cowsayErr := exec.Command("cowsay", "-f", cows[rand.Intn(len(cows))], string(fortune)).Output()
 	if cowsayErr != nil {
 		log.Println(cowsayErr)
-		return "", commands.NewError("So this is awkward but... I think the cow ate the fortune? " +
+		return nil, commands.NewError("So this is awkward but... I think the cow ate the fortune? " +
 			"Something went wrong anyway")
 	}
-	return fmt.Sprintf("```\n%s\n```", string(cowsay)), nil
+	return []string{fmt.Sprintf("```\n%s\n```", string(cowsay))}, nil
 }
 
 // CommandList returns a list of aliases for the Fortune Command

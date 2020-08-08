@@ -17,15 +17,15 @@ func (c Choose) Check() error {
 }
 
 // ProcessMessage processes a set of options to pick from, selecting one at random or returning an error if none are provided
-func (c Choose) ProcessMessage(m *discordgo.MessageCreate) (string, *commands.CommandError) {
+func (c Choose) ProcessMessage(m *discordgo.MessageCreate) ([]string, *commands.CommandError) {
 	splitContent := strings.Fields(m.Content)
 	if len(splitContent) == 1 {
-		return "", commands.NewError("Choices, choices. " +
+		return nil, commands.NewError("Choices, choices. " +
 			"Do I choose the nothing you provided, or the nothing I'm going to provide in return? " +
 			"_Hint_: Give me something to pick smarty pants")
 	}
 	options := splitContent[1:]
-	return options[rand.Intn(len(options))], nil
+	return []string{options[rand.Intn(len(options))]}, nil
 }
 
 // CommandList returns the aliases for the Choose Command

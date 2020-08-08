@@ -20,7 +20,7 @@ func (d Dog) Check() error {
 }
 
 // ProcessMessage for a Dog Command (will return the URL for a random dog (specifically shibe) image)
-func (d Dog) ProcessMessage() (string, *commands.CommandError) {
+func (d Dog) ProcessMessage() ([]string, *commands.CommandError) {
 	return fetchAnimal(dogURL)
 }
 

@@ -25,7 +25,7 @@ func (w Weather) Check(dbPool *pgxpool.Pool) error {
 }
 
 // ProcessMessage processes a given message and fetches the weather for the location specified in the format specified
-func (w Weather) ProcessMessage(m *discordgo.MessageCreate, dbPool *pgxpool.Pool) (string, *commands.CommandError) {
+func (w Weather) ProcessMessage(m *discordgo.MessageCreate, dbPool *pgxpool.Pool) ([]string, *commands.CommandError) {
 	splitCmd := strings.Fields(m.Content)
 	if len(splitCmd) != 0 {
 		log.Println("Valid weather command")
@@ -50,20 +50,20 @@ func (w Weather) ProcessMessage(m *discordgo.MessageCreate, dbPool *pgxpool.Pool
 		url, err := createWeatherURL(splitCmd[1:], m.Author.ID, dbPool)
 		if err != nil {
 			log.Println(err)
-			return "", commands.NewError("Tried to create plan to get weather, but it failed. " +
+			return nil, commands.NewError("Tried to create plan to get weather, but it failed. " +
 				"If this occurred when you thought a location was set, it probably isn't")
 		}
 		// Current forecast (lines 1-7)
 		forecast, weatherErr := detailedWeather(url, 1, 7)
 		if weatherErr != nil {
 			log.Println(err)
-			return "", commands.NewError("Unable to get the weather!" +
+			return nil, commands.NewError("Unable to get the weather!" +
 				" Sorry")
 		}
-		return forecast, nil
+		return []string{forecast}, nil
 
 	}
-	return "", commands.NewError("Provide a location to get the weather for :)")
+	return nil, commands.NewError("Provide a location to get the weather for :)")
 }
 
 // CommandList returns a list of aliases for the Weather Command
@@ -81,11 +81,11 @@ func (w Weather) Help() string {
 		"`!w`/`!weather clear` will clear your preferences (it will always return success unless a database error occurred)"
 }
 
-func handleClassic(location []string, discordUserID string, dbPool *pgxpool.Pool) (string, *commands.CommandError) {
+func handleClassic(location []string, discordUserID string, dbPool *pgxpool.Pool) ([]string, *commands.CommandError) {
 	url, err := createWeatherURL(location, discordUserID, dbPool)
 	if err != nil {
 		log.Println(err)
-		return "", commands.NewError("Tried to create plan to get weather, but it failed.")
+		return nil, commands.NewError("Tried to create plan to get weather, but it failed.")
 	}
 	q := url.Query()
 	q.Set("format", "j1")
@@ -93,7 +93,7 @@ func handleClassic(location []string, discordUserID string, dbPool *pgxpool.Pool
 	body, err := dataWeather(url)
 	if err != nil {
 		log.Println(err)
-		return "", commands.NewError("Tried to get the weather forecast, but couldn't fetch it")
+		return nil, commands.NewError("Tried to get the weather forecast, but couldn't fetch it")
 	}
 	var precip string
 	if body.Weather[0].Hourly[0].ChanceOfRain < body.Weather[0].Hourly[0].ChanceOfSnow {
@@ -101,7 +101,7 @@ func handleClassic(location []string, discordUserID string, dbPool *pgxpool.Pool
 	} else {
 		precip = fmt.Sprintf("%d%% chance of rain", body.Weather[0].Hourly[0].ChanceOfRain)
 	}
-	return fmt.Sprintf("%s, %dºF (%dºC) / feels like %dºF (%dºC) | High: %dºF (%dºC) | Low %dºF (%dºC) | Humidity: %d%% | Wind: %s @ %dmph (%dkm/h) | %s (%s, %s, %s)",
+	return []string{fmt.Sprintf("%s, %dºF (%dºC) / feels like %dºF (%dºC) | High: %dºF (%dºC) | Low %dºF (%dºC) | Humidity: %d%% | Wind: %s @ %dmph (%dkm/h) | %s (%s, %s, %s)",
 		body.CurrentCondition[0].WeatherDesc[0].Value,
 		body.CurrentCondition[0].TempF,
 		body.CurrentCondition[0].TempC,
@@ -118,14 +118,14 @@ func handleClassic(location []string, discordUserID string, dbPool *pgxpool.Pool
 		precip,
 		body.NearestArea[0].AreaName[0].Value,
 		body.NearestArea[0].Region[0].Value,
-		body.NearestArea[0].Country[0].Value), nil
+		body.NearestArea[0].Country[0].Value)}, nil
 }
 
-func handleSimple(location []string, discordUserID string, dbPool *pgxpool.Pool) (string, *commands.CommandError) {
+func handleSimple(location []string, discordUserID string, dbPool *pgxpool.Pool) ([]string, *commands.CommandError) {
 	url, err := createWeatherURL(location, discordUserID, dbPool)
 	if err != nil {
 		log.Println(err)
-		return "", commands.NewError("Tried to create plan to get weather, but it failed.")
+		return nil, commands.NewError("Tried to create plan to get weather, but it failed.")
 	}
 	q := url.Query()
 	q.Set("format", "4")
@@ -133,24 +133,24 @@ func handleSimple(location []string, discordUserID string, dbPool *pgxpool.Pool)
 	body, err := weatherResponse(url)
 	if err != nil {
 		log.Println(err)
-		return "", commands.NewError("Tried to get the weather forecast, but couldn't fetch it")
+		return nil, commands.NewError("Tried to get the weather forecast, but couldn't fetch it")
 	}
 	if len(location) == 0 {
-		return strings.Split(body, ":")[1], nil
+		return []string{strings.Split(body, ":")[1]}, nil
 	}
-	return fmt.Sprintf("%s: %s", strings.Title(strings.Join(location, " ")), strings.Split(body, ":")[1]), nil
+	return []string{fmt.Sprintf("%s: %s", strings.Title(strings.Join(location, " ")), strings.Split(body, ":")[1])}, nil
 }
 
-func setWeatherPreference(location []string, discordUserID string, dbPool *pgxpool.Pool) (string, *commands.CommandError) {
+func setWeatherPreference(location []string, discordUserID string, dbPool *pgxpool.Pool) ([]string, *commands.CommandError) {
 	url, urlErr := createWeatherURL(location, discordUserID, dbPool)
 	if urlErr != nil {
 		log.Println(urlErr)
-		return "", commands.NewError("Tried to create plan to get weather, but it failed.")
+		return nil, commands.NewError("Tried to create plan to get weather, but it failed.")
 	}
 	tag, err := dbPool.Exec(context.Background(), weatherNewDefault, discordUserID, url.String())
 	if err != nil {
 		log.Println(err)
-		return "", commands.NewError("Sorry, I couldn't save your location." +
+		return nil, commands.NewError("Sorry, I couldn't save your location." +
 			" An error occured")
 	}
 	log.Println(tag)
@@ -160,29 +160,29 @@ func setWeatherPreference(location []string, discordUserID string, dbPool *pgxpo
 	body, weatherLocationErr := dataWeather(url)
 	if weatherLocationErr != nil {
 		log.Println(weatherLocationErr)
-		return "", commands.NewError("Your weather location was saved, but (FYI) I couldn't figure out the closes weather station." +
+		return nil, commands.NewError("Your weather location was saved, but (FYI) I couldn't figure out the closes weather station." +
 			" Double check it's a valid location")
 	}
-	return fmt.Sprintf("OK, saved your location."+
+	return []string{fmt.Sprintf("OK, saved your location."+
 			" Closest weather station is %s, %s, %s",
 			body.NearestArea[0].AreaName[0].Value,
 			body.NearestArea[0].Region[0].Value,
-			body.NearestArea[0].Country[0].Value),
+			body.NearestArea[0].Country[0].Value)},
 		nil
 }
 
-func clearWeatherPreference(discordUserID string, dbPool *pgxpool.Pool) (string, *commands.CommandError) {
+func clearWeatherPreference(discordUserID string, dbPool *pgxpool.Pool) ([]string, *commands.CommandError) {
 	tag, err := dbPool.Exec(context.Background(), weatherDrop, discordUserID)
 	if err != nil {
 		log.Println(err)
-		return "", commands.NewError("Couldn't clear the database." +
+		return nil, commands.NewError("Couldn't clear the database." +
 			" A database error occured." +
 			" Try again later or contact the server owner")
 	}
 	log.Println(tag)
-	return fmt.Sprintf("Your preferences have been cleared from the database\n" +
+	return []string{fmt.Sprintf("Your preferences have been cleared from the database\n" +
 		"_Due to automatic logging/backups, there may still be records of this information." +
-		" To request their deletion please contact the owner of the server_"), nil
+		" To request their deletion please contact the owner of the server_")}, nil
 }
 
 func createWeatherURL(location []string, authorID string, dbPool *pgxpool.Pool) (*url.URL, error) {

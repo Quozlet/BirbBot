@@ -54,10 +54,10 @@ func (i Issue) Check() error {
 }
 
 // ProcessMessage will attempt to create an issue with the given text
-func (i Issue) ProcessMessage(m *discordgo.MessageCreate) (string, *commands.CommandError) {
+func (i Issue) ProcessMessage(m *discordgo.MessageCreate) ([]string, *commands.CommandError) {
 	content := strings.Join(strings.Fields(m.Content)[1:], " ")
 	if len(content) == 0 {
-		return "", commands.NewError("Cannot make an issue with no information provided")
+		return nil, commands.NewError("Cannot make an issue with no information provided")
 	}
 	req := graphql.NewRequest(`
 	mutation CreateIssue($repository: ID!, $title: String!, $body: String!, $label: [ID!]) {
@@ -83,10 +83,10 @@ func (i Issue) ProcessMessage(m *discordgo.MessageCreate) (string, *commands.Com
 	req.Header.Set("Authorization", fmt.Sprintf("bearer %s", os.Getenv("GITHUB_TOKEN")))
 	if err := client.Run(context.Background(), req, &issueData); err != nil {
 		log.Println(err)
-		return "", commands.NewError("Failed to make the issue")
+		return nil, commands.NewError("Failed to make the issue")
 	}
 	log.Printf("%+v", issueData)
-	return fmt.Sprintf("Successfully created!\n%s", issueData.CreateIssue.Issue.URL), nil
+	return []string{fmt.Sprintf("Successfully created!\n%s", issueData.CreateIssue.Issue.URL)}, nil
 }
 
 // CommandList returns the invocable aliases for the Issue Command
