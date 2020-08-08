@@ -26,7 +26,7 @@ const RSSSelect string = "SELECT Title, URL, LastItems FROM Feeds WHERE ID = $1"
 
 // DB Migration
 const rssTableMigrationDrop string = "ALTER TABLE Feeds DROP COLUMN LastItemHash CASCADE"
-const rssTableMigrationAdd string = "ALTER TABLE Feeds ADD COLUMN LastItems JSONB NOT NULL"
+const rssTableMigrationAdd string = "ALTER TABLE Feeds ADD COLUMN LastItems JSONB NOT NULL DEFAULT '{}'"
 
 // RSSUpdateLastItem with a new hash
 const RSSUpdateLastItem string = "UPDATE Feeds SET LastItems = $1 WHERE ID = $2"
