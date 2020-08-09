@@ -122,6 +122,7 @@ func discoverCommand(dbPool *pgxpool.Pool) (map[string]*Command, []string) {
 		animal.Dog{},
 		noargs.Fortune{},
 		noargs.FortuneCookie{},
+		persistent.Filter{},
 		persistent.RSS{},
 		persistent.Sub{},
 		recurring.SubCheck{},

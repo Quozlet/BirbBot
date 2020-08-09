@@ -51,7 +51,7 @@ func (s SubCheck) Check(dbPool *pgxpool.Pool) map[string][]string {
 			log.Printf("Fetched %s ok, but no items in feed", feedURL)
 			continue
 		}
-		items := persistent.ReduceItem(feed.Items)
+		items := persistent.ReduceItem(feed.Items, persistent.FetchRegex(id, dbPool))
 		urls := make(map[string]struct{})
 		for _, item := range items {
 			_, contained := lastItems[item.Description]

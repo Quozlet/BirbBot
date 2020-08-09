@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -49,7 +50,7 @@ func (r RSS) ProcessMessage(m *discordgo.MessageCreate, dbPool *pgxpool.Pool) ([
 			"I'm serious, that's what's in the feed: _\"A horrible person\"_." +
 			" We weren't even testing for that")
 	}
-	message := strings.Fields(m.Content)[1:]
+	message := splitContent[1:]
 	switch message[0] {
 	case "list":
 		return listFeeds(dbPool)
@@ -129,7 +130,7 @@ func fetchLatest(args []string, dbPool *pgxpool.Pool) ([]string, *commands.Comma
 		log.Println(err)
 		return nil, commands.NewError("Tried to fetch the feed, but some error occurred reading it")
 	}
-	items := ReduceItem(feed.Items)
+	items := ReduceItem(feed.Items, FetchRegex(id, dbPool))
 	urls := make(map[string]struct{})
 	newFeeds := []string{}
 	for _, item := range items {
@@ -173,7 +174,7 @@ func storeNewFeed(userMsg string, dbPool *pgxpool.Pool) ([]string, *commands.Com
 		rssFeed = fmt.Sprintf("Fetched **%s**", feed.Title)
 	}
 	existing := make(map[string]struct{})
-	for _, item := range ReduceItem(feed.Items) {
+	for _, item := range ReduceItem(feed.Items, nil) {
 		existing[item.Description] = struct{}{}
 	}
 	log.Printf("Inserted %d elements from the feed", len(existing))
@@ -207,22 +208,41 @@ type RSSInfo struct {
 }
 
 // ReduceItem reduces a list of RSS items to a list of titles and secondary text (usually URLs)
-func ReduceItem(items []*gofeed.Item) []RSSInfo {
+func ReduceItem(items []*gofeed.Item, regex *regexp.Regexp) []RSSInfo {
 	infoItems := []RSSInfo{}
 	for _, item := range items {
-		infoItems = append(infoItems, RSSInfo{
+		rssInfo := RSSInfo{
 			Title: html2text.HTML2Text(item.Title),
 			Description: func() string {
 				secondary := item.Link
 				if len(secondary) == 0 {
 					if len(item.Enclosures) != 0 {
+						if regex != nil && regex.MatchString(item.Enclosures[0].URL) {
+							return regex.FindString(item.Enclosures[0].URL)
+						}
 						return item.Enclosures[0].URL
+					}
+					if regex != nil && regex.MatchString(item.Description) {
+						return regex.FindString(item.Description)
 					}
 					return html2text.HTML2Text(item.Description)
 				}
+				if regex != nil && regex.MatchString(secondary) {
+					return regex.FindString(secondary)
+				}
+				// Last ditch attempt, blindly match regex against content
+				if regex != nil {
+					if regex.MatchString(item.Content) {
+						return regex.FindString(item.Content)
+					}
+					return ""
+				}
 				return secondary
 			}(),
-		})
+		}
+		if rssInfo.Description != "" {
+			infoItems = append(infoItems, rssInfo)
+		}
 	}
 	return infoItems
 }
