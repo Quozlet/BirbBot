@@ -36,6 +36,8 @@ func (c Cowsay) ProcessMessage(m *discordgo.MessageCreate) ([]string, *commands.
 	if len(splitContent) == 1 {
 		return nil, commands.NewError("Cows can't say anything unless you give them something to say, dingus")
 	}
+	// Cryptographically secure random numbers not necessary
+	/* #nosec */
 	cow := cows[rand.Intn(len(cows))]
 	cowMsg := string([]rune(m.Content)[len(splitContent[0])+1:])
 	// OK to run user provided input

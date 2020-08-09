@@ -11,7 +11,7 @@ else
 fi
 if command -v gosec >/dev/null; then
 	echo "Found gosec, checking for security issues..."
-	gosec .
+	gosec ./...
 else
 	echo "Warning, couldn't find gosec, not running" >&2
 fi

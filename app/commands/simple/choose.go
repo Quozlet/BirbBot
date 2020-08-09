@@ -25,6 +25,8 @@ func (c Choose) ProcessMessage(m *discordgo.MessageCreate) ([]string, *commands.
 			"_Hint_: Give me something to pick smarty pants")
 	}
 	options := splitContent[1:]
+	// Cryptographically secure random numbers not necessary
+	/* #nosec */
 	return []string{options[rand.Intn(len(options))]}, nil
 }
 

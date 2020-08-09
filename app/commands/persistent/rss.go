@@ -49,7 +49,7 @@ func (r RSS) ProcessMessage(m *discordgo.MessageCreate, dbPool *pgxpool.Pool) ([
 			"I'm serious, that's what's in the feed: _\"A horrible person\"_." +
 			" We weren't even testing for that")
 	}
-	message := strings.Fields(strings.ToLower(m.Content))[1:]
+	message := strings.Fields(m.Content)[1:]
 	switch message[0] {
 	case "list":
 		return listFeeds(dbPool)
@@ -166,11 +166,17 @@ func storeNewFeed(userMsg string, dbPool *pgxpool.Pool) ([]string, *commands.Com
 		return nil, commands.NewError("Tried to fetch the feed, but some error occurred reading it")
 	}
 	feed.Title = html2text.HTML2Text(feed.Title)
-	rssFeed := fmt.Sprintf("Fetched **%s** _(%s)_", feed.Title, html2text.HTML2Text(feed.Description))
+	var rssFeed string
+	if len(feed.Description) != 0 {
+		rssFeed = fmt.Sprintf("Fetched **%s** _(%s)_", feed.Title, html2text.HTML2Text(feed.Description))
+	} else {
+		rssFeed = fmt.Sprintf("Fetched **%s**", feed.Title)
+	}
 	existing := make(map[string]struct{})
 	for _, item := range ReduceItem(feed.Items) {
 		existing[item.Description] = struct{}{}
 	}
+	log.Printf("Inserted %d elements from the feed", len(existing))
 	tag, err := dbPool.Exec(context.Background(), rssNewFeed, html2text.HTML2Text(feed.Title), url.String(), existing)
 	if err != nil {
 		log.Println(err)

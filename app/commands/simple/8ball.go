@@ -43,6 +43,8 @@ func (e EightBall) ProcessMessage(m *discordgo.MessageCreate) ([]string, *comman
 	if len(strings.Fields(m.Content)) == 1 {
 		return nil, commands.NewError("You didn't give me anything to respond to")
 	}
+	// Cryptographically secure random numbers not necessary
+	/* #nosec */
 	return []string{eightBallMessages[rand.Intn(len(eightBallMessages))]}, nil
 }
 
