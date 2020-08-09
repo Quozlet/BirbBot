@@ -167,7 +167,11 @@ func storeNewFeed(userMsg string, dbPool *pgxpool.Pool) ([]string, *commands.Com
 	}
 	feed.Title = html2text.HTML2Text(feed.Title)
 	rssFeed := fmt.Sprintf("Fetched **%s** _(%s)_", feed.Title, html2text.HTML2Text(feed.Description))
-	tag, err := dbPool.Exec(context.Background(), rssNewFeed, html2text.HTML2Text(feed.Title), url.String(), make(map[string]struct{}))
+	existing := make(map[string]struct{})
+	for _, item := range ReduceItem(feed.Items) {
+		existing[item.Description] = struct{}{}
+	}
+	tag, err := dbPool.Exec(context.Background(), rssNewFeed, html2text.HTML2Text(feed.Title), url.String(), existing)
 	if err != nil {
 		log.Println(err)
 		return nil, commands.NewError("Went to insert this feed into the database for later, and it didn't seem to like that." +
