@@ -18,7 +18,7 @@ const filterTableDefinition string = "CREATE TABLE IF NOT EXISTS Filters (ID SER
 const filterInsert string = "INSERT INTO Filters(Regex) VALUES ($1) ON CONFLICT (Regex) DO NOTHING"
 const filterApply string = "UPDATE Filters SET FeedID = $1 WHERE ID = $2"
 const filterList string = "SELECT ID, Regex FROM Filters"
-const filterSelect string = "SELECT Regex FROM Filters WHERE ID = $1"
+const filterSelect string = "SELECT Regex FROM Filters WHERE FeedID = $1"
 
 // Filter is a command to store a regular expression (regex) for filtering RSS feeds
 type Filter struct{}
@@ -124,7 +124,7 @@ func (f Filter) CommandList() []string {
 func (f Filter) Help() string {
 	return "`!filter <regular expression>` saves a regular expression filter to apply to a certain RSS feed.\n" +
 		"Check https://regex101.com/ to create and test regex.\n\n" +
-		"Use `!filter apply <regex id> <feed id>` to apply the filter for an existing subscription. " +
+		"Use `!filter apply <feed id> <regex id>` to apply the filter for an existing subscription. " +
 		"Each possible description will be filtered, and only the (first) matching for each item will be posted.\n\n" +
 		"`!filter list` lists all set filters and their content"
 }
