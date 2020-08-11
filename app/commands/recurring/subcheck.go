@@ -35,6 +35,7 @@ func (s SubCheck) Check(dbPool *pgxpool.Pool) map[string][]string {
 		var feedURL string
 		var lastItems map[string]struct{}
 		if err := dbPool.QueryRow(context.Background(), persistent.RSSSelect, id).Scan(&title, &feedURL, &lastItems); err != nil {
+			log.Println(err)
 			continue
 		}
 		parsedURL, err := url.Parse(feedURL)
@@ -64,7 +65,7 @@ func (s SubCheck) Check(dbPool *pgxpool.Pool) map[string][]string {
 		if err != nil {
 			log.Println(err)
 		}
-		log.Printf("%s (actually inserted %#v for %d)", tag, urls, id)
+		log.Printf("SubCheck: %s (actually inserted %d items for %d)", tag, len(urls), id)
 	}
 	if err := rows.Err(); err != nil {
 		log.Println(err)

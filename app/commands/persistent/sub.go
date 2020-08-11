@@ -72,7 +72,7 @@ func (s Sub) ProcessMessage(m *discordgo.MessageCreate, dbPool *pgxpool.Pool) ([
 			return nil, commands.NewError("Failed to associate the feed with the channel." +
 				" Check that the ID exists")
 		}
-		log.Printf("%s (actually inserted %d, %s)", tag, id, channelID)
+		log.Printf("Sub: %s (actually inserted %d, %s)", tag, id, channelID)
 		return []string{fmt.Sprintf("Got it! Associated %d to %s", id, strings.Fields(m.Content)[2])}, nil
 	}
 }

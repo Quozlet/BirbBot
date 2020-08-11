@@ -37,9 +37,29 @@ func (t Timers) Start(recurringCommandMap map[recurring.Frequency][]*RecurringCo
 					log.Println("Hourly check ran")
 					processRecurringMsg(recurringCommandMap[recurring.Hourly], dbPool, session)
 				}
+			case <-t.QuarterToHourly.C:
+				if len(recurringCommandMap[recurring.QuarterToHourly]) != 0 {
+					log.Println("Quarter-hourly check ran")
+					processRecurringMsg(recurringCommandMap[recurring.HalfHourly], dbPool, session)
+				}
 			case <-t.HalfHourly.C:
 				if len(recurringCommandMap[recurring.HalfHourly]) != 0 {
 					log.Println("Half-hourly check ran")
+					processRecurringMsg(recurringCommandMap[recurring.HalfHourly], dbPool, session)
+				}
+			case <-t.QuarterHourly.C:
+				if len(recurringCommandMap[recurring.QuarterHourly]) != 0 {
+					log.Println("Quarter-hourly check ran")
+					processRecurringMsg(recurringCommandMap[recurring.HalfHourly], dbPool, session)
+				}
+			case <-t.TenMinutely.C:
+				if len(recurringCommandMap[recurring.TenMinutely]) != 0 {
+					log.Println("Quarter-hourly check ran")
+					processRecurringMsg(recurringCommandMap[recurring.HalfHourly], dbPool, session)
+				}
+			case <-t.FiveMinutely.C:
+				if len(recurringCommandMap[recurring.FiveMinutely]) != 0 {
+					log.Println("Quarter-hourly check ran")
 					processRecurringMsg(recurringCommandMap[recurring.HalfHourly], dbPool, session)
 				}
 			case <-t.Minutely.C:
@@ -64,6 +84,7 @@ func processRecurringMsg(cmds []*RecurringCommand, dbPool *pgxpool.Pool, session
 	for _, cmd := range cmds {
 		pendingMsgs := (*cmd).Check(dbPool)
 		for channel, msgs := range pendingMsgs {
+			log.Printf("%s -> %#v", channel, msgs)
 			for _, msg := range msgs {
 				_, err := session.ChannelMessageSend(channel, msg)
 				if err != nil {

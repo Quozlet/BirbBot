@@ -74,7 +74,7 @@ func commandHandler(s *discordgo.Session, m *discordgo.MessageCreate, dbPool *pg
 				}
 				return []string{msgError.Error()}
 			}
-			log.Printf("Responded ok to %s: %s", m.Author.Username, m.Content)
+			log.Printf("Responding [%#v] to %s: %s", response, m.Author.Username, m.Content)
 			return response
 
 		}

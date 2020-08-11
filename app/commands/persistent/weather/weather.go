@@ -153,7 +153,7 @@ func setWeatherPreference(location []string, discordUserID string, dbPool *pgxpo
 		return nil, commands.NewError("Sorry, I couldn't save your location." +
 			" An error occured")
 	}
-	log.Println(tag)
+	log.Printf("Weather: %s (actually inserted %s for Discord user %s)", tag, weatherNewDefault, discordUserID)
 	q := url.Query()
 	q.Set("format", "j1")
 	url.RawQuery = q.Encode()
@@ -179,7 +179,7 @@ func clearWeatherPreference(discordUserID string, dbPool *pgxpool.Pool) ([]strin
 			" A database error occured." +
 			" Try again later or contact the server owner")
 	}
-	log.Println(tag)
+	log.Printf("Weather: %s (actually remove default %s for a user)", tag, weatherDrop)
 	return []string{fmt.Sprintf("Your preferences have been cleared from the database\n" +
 		"_Due to automatic logging/backups, there may still be records of this information." +
 		" To request their deletion please contact the owner of the server_")}, nil

@@ -29,7 +29,7 @@ func (f Filter) Check(dbPool *pgxpool.Pool) error {
 	if err != nil {
 		return err
 	}
-	log.Println(tag)
+	log.Printf("Filter: %s", tag)
 	return nil
 }
 
@@ -65,7 +65,7 @@ func handlePossibleRegex(exp string, dbPool *pgxpool.Pool) ([]string, *commands.
 		log.Println(err)
 		return nil, commands.NewError("Parsed as a valid regex, but failed to save. Try again!")
 	}
-	log.Println(tag)
+	log.Printf("Filter: %s (actually inserted %s)", tag, regex)
 	return []string{"Saved successfully. Use `!filter apply` to apply for a feed"}, nil
 }
 
@@ -89,7 +89,7 @@ func applyRegex(ids []string, dbPool *pgxpool.Pool) ([]string, *commands.Command
 		return nil, commands.NewError(fmt.Sprintf("Failed to apply that filter. "+
 			"Check that %d is a valid filter ID, and %d a valid RSS ID", regexID, feedID))
 	}
-	log.Println(tag)
+	log.Printf("Filter: %s (actually inserted RegexID %d, FeedID %d)", tag, regexID, feedID)
 	return []string{fmt.Sprintf("Successfully associated %d to feed %d", regexID, feedID)}, nil
 }
 

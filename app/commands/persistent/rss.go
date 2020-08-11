@@ -75,7 +75,7 @@ func listFeeds(dbPool *pgxpool.Pool) ([]string, *commands.CommandError) {
 	}
 	builder := strings.Builder{}
 	for _, info := range feeds {
-		builder.WriteString(fmt.Sprintf("ID: %d | %s\n", info.ID, info.Title))
+		builder.WriteString(fmt.Sprintf("ID: %d | %s (%s)\n", info.ID, info.Title, info.URL))
 	}
 	if builder.Len() == 0 {
 		return nil, commands.NewError("Can't list, you haven't subscribed to any feeds yet")
@@ -150,7 +150,7 @@ func fetchLatest(args []string, dbPool *pgxpool.Pool) ([]string, *commands.Comma
 			" Couldn't save these new items as posted." +
 			" They may be reposted.")
 	}
-	log.Println(tag)
+	log.Printf("RSS: %s (actually inserted %d items for %d)", tag, len(urls), id)
 	return newFeeds, nil
 }
 
@@ -177,14 +177,16 @@ func storeNewFeed(userMsg string, dbPool *pgxpool.Pool) ([]string, *commands.Com
 	for _, item := range ReduceItem(feed.Items, nil) {
 		existing[item.Description] = struct{}{}
 	}
-	log.Printf("Inserted %d elements from the feed", len(existing))
 	tag, err := dbPool.Exec(context.Background(), rssNewFeed, html2text.HTML2Text(feed.Title), url.String(), existing)
 	if err != nil {
 		log.Println(err)
 		return nil, commands.NewError("Went to insert this feed into the database for later, and it didn't seem to like that." +
 			" Maybe provide a less spicy feed? Or try some Pepto-Bismol")
 	}
-	log.Println(tag)
+	log.Printf("RSS: %s (actually inserted row with Title %s, URL %s, and %d Existing items at insertion time)", tag,
+		html2text.HTML2Text(feed.Title),
+		url.String(),
+		len(existing))
 	return []string{rssFeed}, nil
 }
 
@@ -215,12 +217,14 @@ func ReduceItem(items []*gofeed.Item, regex *regexp.Regexp) []RSSInfo {
 			Title: html2text.HTML2Text(item.Title),
 			Description: func() string {
 				if regex != nil {
+					log.Println(regex)
 					return extractDescriptionForRegex(regex, item)
 				}
 				return extractDescription(item)
 			}(),
 		}
 		if rssInfo.Description != "" {
+			log.Printf("%#v", rssInfo)
 			infoItems = append(infoItems, rssInfo)
 		}
 	}
