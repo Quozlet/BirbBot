@@ -214,30 +214,10 @@ func ReduceItem(items []*gofeed.Item, regex *regexp.Regexp) []RSSInfo {
 		rssInfo := RSSInfo{
 			Title: html2text.HTML2Text(item.Title),
 			Description: func() string {
-				secondary := item.Link
-				if len(secondary) == 0 {
-					if len(item.Enclosures) != 0 {
-						if regex != nil && regex.MatchString(item.Enclosures[0].URL) {
-							return regex.FindString(item.Enclosures[0].URL)
-						}
-						return item.Enclosures[0].URL
-					}
-					if regex != nil && regex.MatchString(item.Description) {
-						return regex.FindString(item.Description)
-					}
-					return html2text.HTML2Text(item.Description)
-				}
-				if regex != nil && regex.MatchString(secondary) {
-					return regex.FindString(secondary)
-				}
-				// Last ditch attempt, blindly match regex against content
 				if regex != nil {
-					if regex.MatchString(item.Content) {
-						return regex.FindString(item.Content)
-					}
-					return ""
+					return extractDescriptionForRegex(regex, item)
 				}
-				return secondary
+				return extractDescription(item)
 			}(),
 		}
 		if rssInfo.Description != "" {
@@ -245,6 +225,36 @@ func ReduceItem(items []*gofeed.Item, regex *regexp.Regexp) []RSSInfo {
 		}
 	}
 	return infoItems
+}
+
+func extractDescription(item *gofeed.Item) string {
+	secondary := item.Link
+	if len(secondary) == 0 {
+		if len(item.Enclosures) != 0 {
+			return item.Enclosures[0].URL
+		}
+		if len(item.Description) != 0 {
+			return html2text.HTML2Text(item.Description)
+		}
+		return html2text.HTML2Text(item.Content)
+	}
+	return secondary
+}
+
+func extractDescriptionForRegex(regex *regexp.Regexp, item *gofeed.Item) string {
+	if regex.MatchString(item.Link) {
+		return regex.FindString(item.Link)
+	}
+	if len(item.Enclosures) != 0 && regex.MatchString(item.Enclosures[0].URL) {
+		return regex.FindString(item.Enclosures[0].URL)
+	}
+	if regex.MatchString(item.Description) {
+		return regex.FindString(item.Description)
+	}
+	if regex.MatchString(item.Content) {
+		return regex.FindString(item.Content)
+	}
+	return ""
 }
 
 // RefreshFeed fetches a given RSS feed

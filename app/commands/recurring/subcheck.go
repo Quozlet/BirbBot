@@ -64,7 +64,7 @@ func (s SubCheck) Check(dbPool *pgxpool.Pool) map[string][]string {
 		if err != nil {
 			log.Println(err)
 		}
-		log.Println(tag)
+		log.Printf("%s (actually inserted %#v for %d)", tag, urls, id)
 	}
 	if err := rows.Err(); err != nil {
 		log.Println(err)

@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/jackc/pgx/v4/pgxpool"
@@ -54,7 +55,7 @@ func handlePossibleRegex(exp string, dbPool *pgxpool.Pool) ([]string, *commands.
 	if possibleRegexIndex < -1 {
 		return nil, commands.NewError(fmt.Sprintf("Failed to parse '%s'", exp))
 	}
-	regex, err := regexp.Compile(string([]rune(exp)[possibleRegexIndex:]))
+	regex, err := regexp.Compile(strings.TrimLeftFunc(string([]rune(exp)[possibleRegexIndex:]), unicode.IsSpace))
 	if err != nil {
 		log.Println(err)
 		return nil, commands.NewError(fmt.Sprintf("Failed to parse '%s'", string([]rune(exp)[possibleRegexIndex:])))
