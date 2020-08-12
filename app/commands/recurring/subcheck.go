@@ -58,14 +58,20 @@ func (s SubCheck) Check(dbPool *pgxpool.Pool) map[string][]string {
 			_, contained := lastItems[item.Description]
 			if !contained {
 				pendingMessages[channel] = append(pendingMessages[channel], fmt.Sprintf("%s\n**%s**\n%s", title, item.Title, item.Description))
+				urls[item.Description] = struct{}{}
 			}
-			urls[item.Description] = struct{}{}
 		}
-		tag, err := dbPool.Exec(context.Background(), persistent.RSSUpdateLastItem, urls, id)
+		log.Printf("Identified %d new items, and %d existing ones", len(urls), len(lastItems))
+		tag, err := dbPool.Exec(context.Background(), persistent.RSSUpdateLastItem, func() map[string]struct{} {
+			for desc := range lastItems {
+				urls[desc] = struct{}{}
+			}
+			return urls
+		}(), id)
 		if err != nil {
 			log.Println(err)
 		}
-		log.Printf("SubCheck: %s (actually inserted %d items for %d)", tag, len(urls), id)
+		log.Printf("SubCheck: %s (for ID %d)", tag, id)
 	}
 	if err := rows.Err(); err != nil {
 		log.Println(err)
