@@ -126,6 +126,7 @@ func discoverCommand(dbPool *pgxpool.Pool) (map[string]*Command, []string) {
 		persistent.RSS{},
 		persistent.Sub{},
 		recurring.SubCheck{},
+		recurring.SubCleanup{},
 		simple.Choose{},
 		simple.Cowsay{},
 		simple.EightBall{},
@@ -149,7 +150,7 @@ func discoverCommand(dbPool *pgxpool.Pool) (map[string]*Command, []string) {
 			if isRecurring {
 				freq := recurringCmd.Frequency()
 				recurringCommands[freq] = append(recurringCommands[freq], &recurringCmd)
-				log.Printf("Registered recurring command: %s", reflect.TypeOf(recurringCmd).Name())
+				log.Printf("Registered recurring %v command: %s", recurringCmd.Frequency(), reflect.TypeOf(recurringCmd).Name())
 			}
 		}
 	}

@@ -78,3 +78,61 @@ func (s SubCheck) Check(dbPool *pgxpool.Pool) map[string][]string {
 func (s SubCheck) Frequency() Frequency {
 	return HalfHourly
 }
+
+// SubCleanup runs once a day to cleanup the growing list of posted content
+type SubCleanup struct{}
+
+// Check will load the current elements of the feed and insert them as posted
+func (s SubCleanup) Check(dbPool *pgxpool.Pool) map[string][]string {
+	rows, err := dbPool.Query(context.Background(), subList)
+	if err != nil {
+		log.Println(err)
+		return nil
+	}
+	// For each ID, map channel to pending messages, return chunk
+	for rows.Next() {
+		var id int64
+		var channel string
+		if err := rows.Scan(&id, &channel); err != nil {
+			log.Println(err)
+			continue
+		}
+		var title string
+		var feedURL string
+		var lastItems map[string]struct{}
+		if err := dbPool.QueryRow(context.Background(), persistent.RSSSelect, id).Scan(&title, &feedURL, &lastItems); err != nil {
+			log.Println(err)
+			continue
+		}
+		parsedURL, err := url.Parse(feedURL)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		feed, err := persistent.RefreshFeed(parsedURL)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		items := persistent.ReduceItem(feed.Items, persistent.FetchRegex(id, dbPool))
+		urls := make(map[string]struct{})
+		for _, item := range items {
+			urls[item.Description] = struct{}{}
+		}
+		tag, err := dbPool.Exec(context.Background(), persistent.RSSUpdateLastItem, urls, id)
+		if err != nil {
+			log.Println(err)
+		}
+		log.Printf("SubCheck: %s (actually inserted %d items for %d)", tag, len(urls), id)
+	}
+	if err := rows.Err(); err != nil {
+		log.Println(err)
+		return nil
+	}
+	return nil
+}
+
+// Frequency is the frequency of the sub cleanup
+func (s SubCleanup) Frequency() Frequency {
+	return Daily
+}

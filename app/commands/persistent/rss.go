@@ -137,13 +137,18 @@ func fetchLatest(args []string, dbPool *pgxpool.Pool) ([]string, *commands.Comma
 		_, contained := info.LastItems[item.Description]
 		if !contained {
 			newFeeds = append(newFeeds, fmt.Sprintf("%s: **%s**\n%s", info.Title, item.Title, item.Description))
+			urls[item.Description] = struct{}{}
 		}
-		urls[item.Description] = struct{}{}
 	}
 	if len(newFeeds) == 0 {
 		return []string{"Nothing new to report"}, nil
 	}
-	tag, err := dbPool.Exec(context.Background(), RSSUpdateLastItem, urls, id)
+	tag, err := dbPool.Exec(context.Background(), RSSUpdateLastItem, func() map[string]struct{} {
+		for desc := range info.LastItems {
+			urls[desc] = struct{}{}
+		}
+		return urls
+	}(), id)
 	if err != nil {
 		log.Println(err)
 		return nil, commands.NewError("Internal errors." +
