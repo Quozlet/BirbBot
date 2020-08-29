@@ -26,7 +26,7 @@ func (c Cat) ProcessMessage() ([]string, *commands.CommandError) {
 
 // CommandList returns applicable aliases for Cat Command
 func (c Cat) CommandList() []string {
-	return []string{"!cat"}
+	return []string{"cat"}
 }
 
 // Help returns the Cat Command help message

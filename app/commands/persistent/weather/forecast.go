@@ -18,14 +18,18 @@ func (f Forecast) Check(dbPool *pgxpool.Pool) error {
 }
 
 // ProcessMessage processes a given message and fetches the weather for the location specified for the day specified
-func (f Forecast) ProcessMessage(m *discordgo.MessageCreate, dbPool *pgxpool.Pool) ([]string, *commands.CommandError) {
+func (f Forecast) ProcessMessage(
+	response chan<- commands.MessageResponse,
+	m *discordgo.MessageCreate,
+	dbPool *pgxpool.Pool,
+) *commands.CommandError {
 	message := strings.Fields(m.Content)[1:]
 	// Start of extended forcast (lines 7-17)
 	start, end := 7, 17
 	url, err := createWeatherURL(message, m.Author.ID, dbPool)
 	if err != nil {
 		log.Println(err)
-		return nil, commands.NewError("Tried to create a plan to fetch the weather, but it failed")
+		return commands.NewError("Tried to create a plan to fetch the weather, but it failed")
 	}
 	if len(message) != 0 {
 		log.Printf("Recognized variant %s, processing", message[0])
@@ -42,25 +46,30 @@ func (f Forecast) ProcessMessage(m *discordgo.MessageCreate, dbPool *pgxpool.Poo
 	}
 	if err != nil {
 		log.Println(err)
-		return nil, commands.NewError("Failed to make a plan for getting the weather." +
+		return commands.NewError("Failed to make a plan for getting the weather." +
 			" Try again later (if this occurred when you thought a location was set, it probably isn't)")
 	}
 	forecast, err := detailedWeather(url, start, end)
 	if err != nil {
 		log.Println(err)
-		return nil, commands.NewError("Couldn't get the forecast for that location for some reason")
+		return commands.NewError("Couldn't get the forecast for that location for some reason")
 	}
-	return []string{forecast}, nil
+	response <- commands.MessageResponse{
+		ChannelID: m.ChannelID,
+		Message:   forecast,
+	}
+	return nil
 }
 
 // CommandList returns a list of aliases for the Forecast Command
 func (f Forecast) CommandList() []string {
-	return []string{"!forecast"}
+	return []string{"forecast"}
 }
 
 // Help returns the help message for the Forecase Command
 func (f Forecast) Help() string {
-	return "Provides today's forecast for a location (either provided or set) " +
-		"(use `!forecast tomorrow`/`!forecast last` to get tomorrow and the day after's forecast, respectively)\n\n" +
-		"To manage set locations, use the `!w`/`!weather set` or `!w`/`!weather clear` commands"
+	return "Provides today's forecast for a location (either provided or set)\n" +
+		"- `forecast tomorrow` gets the forecast for tomorrow\n" +
+		"- `forecast last` gets the forecast for the day after next\n\n" +
+		"To manage set locations, use the `w`/`weather set` or `w`/`weather clear` commands"
 }

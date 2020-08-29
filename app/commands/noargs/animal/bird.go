@@ -26,7 +26,7 @@ func (b Bird) ProcessMessage() ([]string, *commands.CommandError) {
 
 // CommandList returns applicable alises for the Bird Command
 func (b Bird) CommandList() []string {
-	return []string{"!bird", "!birb"}
+	return []string{"bird", "birb"}
 }
 
 // Help returns the Bird Command hepl message

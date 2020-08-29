@@ -56,7 +56,7 @@ func main() {
 		return
 	}
 
-	log.Println("Successful startup! Kill the process to stop the bot")
+	log.Println("Completed startup! Kill the process to stop the bot")
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)

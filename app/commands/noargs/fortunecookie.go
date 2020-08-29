@@ -34,7 +34,7 @@ func (fc FortuneCookie) ProcessMessage() ([]string, *commands.CommandError) {
 
 // CommandList returns a list of aliases for the FortuneCookie Command
 func (fc FortuneCookie) CommandList() []string {
-	return []string{"!fortunecookie", "!fortune-cookie", "!fc"}
+	return []string{"fortunecookie", "fortune-cookie", "fc"}
 }
 
 // Help returns the help message for the FortuneCookie Command

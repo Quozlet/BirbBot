@@ -54,10 +54,13 @@ func (i Issue) Check() error {
 }
 
 // ProcessMessage will attempt to create an issue with the given text
-func (i Issue) ProcessMessage(m *discordgo.MessageCreate) ([]string, *commands.CommandError) {
+func (i Issue) ProcessMessage(
+	response chan<- commands.MessageResponse,
+	m *discordgo.MessageCreate,
+) *commands.CommandError {
 	content := strings.Join(strings.Fields(m.Content)[1:], " ")
 	if len(content) == 0 {
-		return nil, commands.NewError("Cannot make an issue with no information provided")
+		return commands.NewError("Cannot make an issue with no information provided")
 	}
 	req := graphql.NewRequest(`
 	mutation CreateIssue($repository: ID!, $title: String!, $body: String!, $label: [ID!]) {
@@ -83,22 +86,26 @@ func (i Issue) ProcessMessage(m *discordgo.MessageCreate) ([]string, *commands.C
 	req.Header.Set("Authorization", fmt.Sprintf("bearer %s", os.Getenv("GITHUB_TOKEN")))
 	if err := client.Run(context.Background(), req, &issueData); err != nil {
 		log.Println(err)
-		return nil, commands.NewError("Failed to make the issue")
+		return commands.NewError("Failed to make the issue")
 	}
 	log.Printf("%+v", issueData)
-	return []string{fmt.Sprintf("Successfully created!\n%s", issueData.CreateIssue.Issue.URL)}, nil
+	response <- commands.MessageResponse{
+		ChannelID: m.ChannelID,
+		Message:   fmt.Sprintf("Successfully created!\n%s", issueData.CreateIssue.Issue.URL),
+	}
+	return nil
 }
 
 // CommandList returns the invocable aliases for the Issue Command
 func (i Issue) CommandList() []string {
-	return []string{"!issue", "!bug"}
+	return []string{"issue", "bug"}
 }
 
 // Help gives help information for the Issue Command
 func (i Issue) Help() string {
-	return "Opens a GitHub issue with the provided text." +
-		" `!issue` opens an issue with no tags" +
-		" `!bug` is a shorthand for opening an issue and tagging as a bug"
+	return "Opens a GitHub issue with the provided text.\n" +
+		"- `issue` opens an issue with no tags\n" +
+		"- `bug` is a shorthand for opening an issue and tagging as a bug"
 }
 
 // Label for the bug tag

@@ -26,7 +26,7 @@ func (d Dog) ProcessMessage() ([]string, *commands.CommandError) {
 
 // CommandList returns applicable aliases for Dog Command
 func (d Dog) CommandList() []string {
-	return []string{"!dog", "!shibe"}
+	return []string{"dog", "shibe"}
 }
 
 // Help returns the Dog Command help message

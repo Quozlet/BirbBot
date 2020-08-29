@@ -31,10 +31,13 @@ func (c Cowsay) Check() error {
 }
 
 // ProcessMessage processes a message and returns a cow saying it, or an error if no message was supplied
-func (c Cowsay) ProcessMessage(m *discordgo.MessageCreate) ([]string, *commands.CommandError) {
+func (c Cowsay) ProcessMessage(
+	response chan<- commands.MessageResponse,
+	m *discordgo.MessageCreate,
+) *commands.CommandError {
 	splitContent := strings.Fields(m.Content)
 	if len(splitContent) == 1 {
-		return nil, commands.NewError("Cows can't say anything unless you give them something to say, dingus")
+		return commands.NewError("Cows can't say anything unless you give them something to say, dingus")
 	}
 	// Cryptographically secure random numbers not necessary
 	/* #nosec */
@@ -45,14 +48,18 @@ func (c Cowsay) ProcessMessage(m *discordgo.MessageCreate) ([]string, *commands.
 	cowsay, err := exec.Command("cowsay", "-f", cow, cowMsg).Output()
 	if err != nil {
 		log.Println(err)
-		return nil, commands.NewError("Something bad happened when I asked the cow to say that...")
+		return commands.NewError("Something bad happened when I asked the cow to say that...")
 	}
-	return []string{fmt.Sprintf("```\n%s\n```", string(cowsay))}, nil
+	response <- commands.MessageResponse{
+		ChannelID: m.ChannelID,
+		Message:   fmt.Sprintf("```\n%s\n```", string(cowsay)),
+	}
+	return nil
 }
 
 // CommandList returns a list of aliases for the Cowsay Command
 func (c Cowsay) CommandList() []string {
-	return []string{"!cowsay"}
+	return []string{"cowsay"}
 }
 
 // Help returns the help message for the Cowsay Command

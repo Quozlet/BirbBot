@@ -55,7 +55,7 @@ func (f Fortune) ProcessMessage() ([]string, *commands.CommandError) {
 
 // CommandList returns a list of aliases for the Fortune Command
 func (f Fortune) CommandList() []string {
-	return []string{"!fortune"}
+	return []string{"fortune"}
 }
 
 // Help returns the help message for the Fortune Command

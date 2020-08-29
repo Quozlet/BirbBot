@@ -27,45 +27,52 @@ func (w Wiki) Check() error {
 }
 
 // ProcessMessage searches for a Wikipedia article by title
-func (w Wiki) ProcessMessage(m *discordgo.MessageCreate) ([]string, *commands.CommandError) {
+func (w Wiki) ProcessMessage(
+	msgResponse chan<- commands.MessageResponse,
+	m *discordgo.MessageCreate,
+) *commands.CommandError {
 	splitContent := strings.Fields(m.Content)
 	if len(splitContent) == 1 {
-		return nil, commands.NewError("You didn't provide anything to look for on Wikipedia")
+		return commands.NewError("You didn't provide anything to look for on Wikipedia")
 	}
 	title := url.QueryEscape(strings.Join(splitContent[1:], "_"))
 	wikiURL, err := url.Parse(wikiURL + title)
 	log.Println(wikiURL)
 	if err != nil {
 		log.Println(err)
-		return nil, commands.NewError("Failed to make that query into a request")
+		return commands.NewError("Failed to make that query into a request")
 	}
 	response, err := http.Get(wikiURL.String())
 	if err != nil {
 		log.Println(err)
-		return nil, commands.NewError("Didn't hear back from Wikipedia about that article")
+		return commands.NewError("Didn't hear back from Wikipedia about that article")
 	}
 	defer response.Body.Close()
 	wiki := wikiResponse{}
 	if err := json.NewDecoder(response.Body).Decode(&wiki); err != nil {
 		log.Println(err)
-		return nil, commands.NewError("Heard back from Wikipedia, but couldn't process the response")
+		return commands.NewError("Heard back from Wikipedia, but couldn't process the response")
 	}
 	if len(wiki.Description) == 0 || len(wiki.ContentURLs.Desktop.Page) == 0 {
 		log.Printf("+%v", wiki)
-		return nil, commands.NewError("Didn't find a matching Wikipedia article")
+		return commands.NewError("Didn't find a matching Wikipedia article")
 	}
-	return []string{fmt.Sprintf("%s: %s", wiki.Description, wiki.ContentURLs.Desktop.Page)}, nil
+	msgResponse <- commands.MessageResponse{
+		ChannelID: m.ChannelID,
+		Message:   fmt.Sprintf("%s: %s", wiki.Description, wiki.ContentURLs.Desktop.Page),
+	}
+	return nil
 
 }
 
 // CommandList returns a list of aliases for the Wiki Command
 func (w Wiki) CommandList() []string {
-	return []string{"!wiki"}
+	return []string{"wiki"}
 }
 
 // Help returns the help message for the Wiki Command
 func (w Wiki) Help() string {
-	return "`!wiki <title>` will make a best guess attempt to find the most relevant Wikipedia article"
+	return "`wiki <title>` will make a best guess attempt to find the most relevant Wikipedia article"
 }
 
 type wikiResponse struct {

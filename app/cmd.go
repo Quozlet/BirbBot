@@ -1,11 +1,16 @@
 package app
 
 import (
+	"strings"
+
 	"github.com/bwmarrin/discordgo"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"quozlet.net/birbbot/app/commands"
 	"quozlet.net/birbbot/app/commands/recurring"
 )
+
+// Prefix that all commands must begin with to be recognized
+const Prefix = '!'
 
 // Command is an interface that must be implemented for commands
 type Command interface {
@@ -20,7 +25,7 @@ type SimpleCommand interface {
 	// Check asserts all preconditions are met, and returns an error if they are not
 	Check() error
 	// ProcessMessage processes all additional arguments to the command (split on whitespace)
-	ProcessMessage(*discordgo.MessageCreate) ([]string, *commands.CommandError)
+	ProcessMessage(chan<- commands.MessageResponse, *discordgo.MessageCreate) *commands.CommandError
 }
 
 // PersistentCommand is a command that will persist some data into a database
@@ -28,14 +33,14 @@ type PersistentCommand interface {
 	// Check asserts all preconditions are met, and returns an error if they are not
 	Check(*pgxpool.Pool) error
 	// ProcessMessage processes all additional arguments to the command (split on whitespace)
-	ProcessMessage(*discordgo.MessageCreate, *pgxpool.Pool) ([]string, *commands.CommandError)
+	ProcessMessage(chan<- commands.MessageResponse, *discordgo.MessageCreate, *pgxpool.Pool) *commands.CommandError
 }
 
 // NoArgsCommand will always go through the same flow to response, irrespective of arguments
 type NoArgsCommand interface {
 	// Check asserts all preconditions are met, and returns an error if they are not
 	Check() error
-	// ProcessMessage processes all additional arguments to the command (split on whitespace)
+	// ProcessMessage returns the response
 	ProcessMessage() ([]string, *commands.CommandError)
 }
 
@@ -46,4 +51,12 @@ type RecurringCommand interface {
 	Check(*pgxpool.Pool) map[string][]string
 	// Frequency reports the preferred frequency for this command
 	Frequency() recurring.Frequency
+}
+
+// BuildCommandName is a helper function to efficiently concatenate the current prefix with a command name
+func BuildCommandName(alias string) string {
+	var builder strings.Builder
+	builder.WriteRune(Prefix)
+	builder.WriteString(alias)
+	return builder.String()
 }

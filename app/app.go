@@ -18,7 +18,7 @@ import (
 	"quozlet.net/birbbot/app/commands/simple"
 )
 
-var recurringCommands map[recurring.Frequency][]*RecurringCommand = map[recurring.Frequency][]*RecurringCommand{}
+var recurringCommands = map[recurring.Frequency][]*RecurringCommand{}
 
 // Start a Discord session for a given token
 func Start(secret string, dbPool *pgxpool.Pool, ticker *Timers) (*discordgo.Session, error) {
@@ -31,85 +31,70 @@ func Start(secret string, dbPool *pgxpool.Pool, ticker *Timers) (*discordgo.Sess
 		log.Println("Unable to create Discord session")
 		return nil, err
 	}
-	log.Println("Successfully created Discord session")
+	log.Println("Bot Token accepted by Discord, beginning connection...")
+	messageChannel := make(chan commands.MessageResponse)
+	go waitForCommandResponses(session, messageChannel)
 	// TODO: If panicking while processing a command, error instead of crashing
 	session.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
 		// Ignore messages without the '!' prefix or with own ID
-		if m.Author.ID == s.State.User.ID || !strings.HasPrefix(m.Content, "!") {
+		if m.Author.ID == s.State.User.ID || !strings.HasPrefix(m.Content, string(Prefix)) {
 			return
 		}
-		commandHandler(s, m, dbPool, commandMap, commandList)
+		commandHandler(s, m, dbPool, commandMap, commandList, messageChannel)
 	})
 	ticker.Start(recurringCommands, dbPool, session)
 	if err = session.Open(); err != nil {
 		log.Println("Failed to open WebSocket connection to Discord servers")
 		return nil, err
 	}
-	log.Println("Opened WebSocket connection to Discord")
+	log.Println("Opened WebSocket connection to Discord...")
 	return session, nil
 }
 
-func commandHandler(s *discordgo.Session, m *discordgo.MessageCreate, dbPool *pgxpool.Pool, commandMap map[string]*Command, commandList []string) {
+func commandHandler(
+	s *discordgo.Session,
+	m *discordgo.MessageCreate,
+	dbPool *pgxpool.Pool,
+	commandMap map[string]*Command,
+	commandList []string,
+	msgChannel chan commands.MessageResponse,
+) {
 	content := strings.Fields(strings.ToLower(m.Content))
-	cmd := commandMap[content[0]]
+	cmd, found := commandMap[content[0]]
 	log.Printf("Ack %s: %s", m.Author.Username, m.Content)
-	responses := func() []string {
-		if cmd != nil {
-			if err := s.MessageReactionAdd(m.ChannelID, m.Message.ID, "✅"); err != nil {
-				log.Println(err)
-			}
-			defer func() {
-				if err := s.MessageReactionRemove(m.ChannelID, m.Message.ID, "✅", s.State.User.ID); err != nil {
-					log.Println(err)
+	if !found {
+		if content[0] == BuildCommandName("help") {
+			helpMsg := fmt.Sprintf("Available commands (All require prefix `%s`):\n`%s`,"+
+				"(For more information on a specific command: `help <command name>`)", string(Prefix), strings.Join(commandList, "`, `"))
+			if len(content[1:]) != 0 {
+				cmd, ok := commandMap[BuildCommandName(content[1])]
+				if !ok {
+					helpMsg = fmt.Sprintf("Cannot find help message, command `%s` does not exist", BuildCommandName(content[1]))
+				} else {
+					helpMsg = (*cmd).Help()
 				}
-			}()
-			response, msgError := processMessage(m, cmd, dbPool)
-			if msgError != nil {
-				log.Printf("An error occurred processing %s: %s", content, msgError.Error())
-				if err := s.MessageReactionRemove(m.ChannelID, m.Message.ID, "✅", s.State.User.ID); err != nil {
-					log.Println(err)
-				}
-				if err := s.MessageReactionAdd(m.ChannelID, m.Message.ID, "❗"); err != nil {
-					log.Println(err)
-				}
-				return []string{msgError.Error()}
 			}
-			log.Printf("Responding [%#v] to %s: %s", response, m.Author.Username, m.Content)
-			return response
-
-		}
-		// Handle '!help', '!license', '!source'
-		switch content[0] {
-		case "!help":
-			if len(content[1:]) == 0 || commandMap["!"+content[1]] == nil {
-				return []string{fmt.Sprintf("Available commands:\n`%s`,"+
-					" `!license` (the software license that applies to this bot's source code),"+
-					" `!source` (a link to this bot's source code)\n\n"+
-					"(For more information on a specific command: `!help <command name>`)", strings.Join(commandList, "`, `"))}
+			msgChannel <- commands.MessageResponse{
+				ChannelID: m.ChannelID,
+				Message:   helpMsg,
 			}
-			return []string{(*commandMap["!"+content[1]]).Help()}
 
-		case "!license":
-			return []string{"This bot's source code is licensed under the The Open Software License 3.0 (https://spdx.org/licenses/OSL-3.0.html)"}
-
-		case "!source":
-			return []string{"https://github.com/Quozlet/BirbBot"}
-
-		default:
+		} else {
 			log.Printf("Unrecognized command: %s", m.Content)
-			return []string{fmt.Sprintf("Unrecognized command: `%s`", content[0])}
-		}
-
-	}()
-	if len(responses) != 0 {
-		for _, response := range responses {
-			_, err := s.ChannelMessageSend(m.ChannelID, response)
-			if err != nil {
-				log.Printf("Failed to respond: %s", err)
+			msgChannel <- commands.MessageResponse{
+				ChannelID: m.ChannelID,
+				Message:   fmt.Sprintf("Unrecognized command: `%s`", content[0]),
 			}
 		}
+		return
 	}
-
+	go processCommand(discordInfo{
+		session: s,
+		message: m,
+	}, msgInfo{
+		handler: cmd,
+		channel: msgChannel,
+	}, dbPool)
 }
 
 // TODO: Automatically populate commands (requires some AST parser black magic)
@@ -122,6 +107,8 @@ func discoverCommand(dbPool *pgxpool.Pool) (map[string]*Command, []string) {
 		animal.Dog{},
 		noargs.Fortune{},
 		noargs.FortuneCookie{},
+		noargs.License{},
+		noargs.Source{},
 		persistent.Filter{},
 		persistent.RSS{},
 		persistent.Sub{},
@@ -139,11 +126,7 @@ func discoverCommand(dbPool *pgxpool.Pool) (map[string]*Command, []string) {
 		command, ok := cmd.(Command)
 		if ok && isValidCommand(&command, dbPool) {
 			for _, alias := range command.CommandList() {
-				if strings.HasPrefix(alias, "!") {
-					commandMap[alias] = &command
-				} else {
-					log.Printf("Not registering %s (doesn't start with '!')", alias)
-				}
+				commandMap[BuildCommandName(alias)] = &command
 			}
 		} else {
 			recurringCmd, isRecurring := cmd.(RecurringCommand)
@@ -191,18 +174,40 @@ func isValidCommand(command *Command, dbPool *pgxpool.Pool) bool {
 	return true
 }
 
-func processMessage(m *discordgo.MessageCreate, command *Command, dbPool *pgxpool.Pool) ([]string, *commands.CommandError) {
-	simpleCmd, isSimple := (*command).(SimpleCommand)
-	noArgsCmd, hasNoArgs := (*command).(NoArgsCommand)
-	persistentCmd, isPersistent := (*command).(PersistentCommand)
-	if isSimple {
-		return simpleCmd.ProcessMessage(m)
-	} else if hasNoArgs {
-		return noArgsCmd.ProcessMessage()
-	} else if isPersistent {
-		return persistentCmd.ProcessMessage(m, dbPool)
-	} else {
-		log.Fatalf("Got %s, an invalid command!", reflect.TypeOf(*command).Name())
-		return nil, commands.NewError("A critical error occurred processing this message")
+func waitForCommandResponses(session *discordgo.Session, messageChannel <-chan commands.MessageResponse) {
+	for pendingMsg := range messageChannel {
+		if len(pendingMsg.Reaction.MessageID) != 0 {
+			if len(pendingMsg.Reaction.Add) != 0 {
+				if err := session.MessageReactionAdd(
+					pendingMsg.ChannelID,
+					pendingMsg.Reaction.MessageID,
+					pendingMsg.Reaction.Add,
+				); err != nil {
+					log.Printf("Failed to add reaction %s: %s",
+						pendingMsg.Reaction.Add,
+						err.Error(),
+					)
+				}
+			}
+			if len(pendingMsg.Reaction.Remove) != 0 {
+				if err := session.MessageReactionRemove(
+					pendingMsg.ChannelID,
+					pendingMsg.Reaction.MessageID,
+					pendingMsg.Reaction.Remove,
+					session.State.User.ID,
+				); err != nil {
+					log.Printf("Failed to remove reaction %s: %s",
+						pendingMsg.Reaction.Remove,
+						err.Error(),
+					)
+				}
+			}
+		}
+		if len(pendingMsg.Message) != 0 {
+			_, err := session.ChannelMessageSend(pendingMsg.ChannelID, pendingMsg.Message)
+			if err != nil {
+				log.Println(err)
+			}
+		}
 	}
 }

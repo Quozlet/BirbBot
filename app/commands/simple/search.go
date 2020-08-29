@@ -27,10 +27,13 @@ func (s Search) Check() error {
 }
 
 // ProcessMessage with search query and return first result
-func (s Search) ProcessMessage(m *discordgo.MessageCreate) ([]string, *commands.CommandError) {
+func (s Search) ProcessMessage(
+	msgResponse chan<- commands.MessageResponse,
+	m *discordgo.MessageCreate,
+) *commands.CommandError {
 	splitContent := strings.Fields(m.Content)
 	if len(splitContent) == 1 {
-		return nil, commands.NewError("Can't search for nothing." +
+		return commands.NewError("Can't search for nothing." +
 			" I mean, I can search for 'nothing', but you gave me nothing to search..." +
 			" Listen, you get it." +
 			" Provide some input next time")
@@ -38,7 +41,7 @@ func (s Search) ProcessMessage(m *discordgo.MessageCreate) ([]string, *commands.
 	searchURL, err := url.Parse(searchURL)
 	if err != nil {
 		log.Println(err)
-		return nil, commands.NewError("Failed to make that query into searchable text")
+		return commands.NewError("Failed to make that query into searchable text")
 	}
 	q := searchURL.Query()
 	q.Set("q", url.QueryEscape(strings.Join(splitContent[1:], " ")))
@@ -46,38 +49,42 @@ func (s Search) ProcessMessage(m *discordgo.MessageCreate) ([]string, *commands.
 	request, err := http.NewRequest("GET", searchURL.String(), nil)
 	if err != nil {
 		log.Println(err)
-		return nil, commands.NewError("Failure occurred while constructing request")
+		return commands.NewError("Failure occurred while constructing request")
 	}
 	request.Header.Set("User-Agent", "birbbot")
 	log.Printf("Searching %s", searchURL.String())
 	response, err := (&http.Client{}).Do(request)
 	if err != nil {
 		log.Println(err)
-		return nil, commands.NewError("Failed to hear back from the server")
+		return commands.NewError("Failed to hear back from the server")
 	}
 	defer response.Body.Close()
 	search := SearchResponse{}
 	if err := json.NewDecoder(response.Body).Decode(&search); err != nil {
 		log.Println(err)
-		return nil, commands.NewError("Heard back, but couldn't process the response")
+		return commands.NewError("Heard back, but couldn't process the response")
 	}
 	if len(search.Results) == 0 {
-		return nil, commands.NewError("No results found")
+		return commands.NewError("No results found")
 	}
-	return []string{fmt.Sprintf("**%s**\n%s\n%s",
-		search.Results[0].Title,
-		search.Results[0].Content,
-		search.Results[0].URL)}, nil
+	msgResponse <- commands.MessageResponse{
+		ChannelID: m.ChannelID,
+		Message: fmt.Sprintf("**%s**\n%s\n%s",
+			search.Results[0].Title,
+			search.Results[0].Content,
+			search.Results[0].URL),
+	}
+	return nil
 }
 
 // CommandList returns a list of aliases for the Search Command
 func (s Search) CommandList() []string {
-	return []string{"!s", "!search"}
+	return []string{"s", "search"}
 }
 
 // Help returns the help message for the Weather Command
 func (s Search) Help() string {
-	return "`!s`/`!search` to perform a web search\n" +
+	return "`s`/`search` to perform a web search\n" +
 		"_Powered by searX_"
 }
 

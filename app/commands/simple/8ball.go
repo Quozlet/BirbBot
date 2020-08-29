@@ -39,18 +39,25 @@ func (e EightBall) Check() error {
 }
 
 // ProcessMessage will return an error if no arguments are provided, otherwise a random message is chosen
-func (e EightBall) ProcessMessage(m *discordgo.MessageCreate) ([]string, *commands.CommandError) {
+func (e EightBall) ProcessMessage(
+	response chan<- commands.MessageResponse,
+	m *discordgo.MessageCreate,
+) *commands.CommandError {
 	if len(strings.Fields(m.Content)) == 1 {
-		return nil, commands.NewError("You didn't give me anything to respond to")
+		return commands.NewError("You didn't give me anything to respond to")
 	}
 	// Cryptographically secure random numbers not necessary
 	/* #nosec */
-	return []string{eightBallMessages[rand.Intn(len(eightBallMessages))]}, nil
+	response <- commands.MessageResponse{
+		ChannelID: m.ChannelID,
+		Message:   eightBallMessages[rand.Intn(len(eightBallMessages))],
+	}
+	return nil
 }
 
 // CommandList returns the invocable aliases for the 8 Ball Command
 func (e EightBall) CommandList() []string {
-	return []string{"!8", "!8ball"}
+	return []string{"8", "8ball"}
 }
 
 // Help gives help information for the 8 Ball Command

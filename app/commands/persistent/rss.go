@@ -42,10 +42,14 @@ func (r RSS) Check(dbPool *pgxpool.Pool) error {
 }
 
 // ProcessMessage attempts to parse the first argument as a URL to an RSS feed, then fetch the first argument. If any step fails, an error is returned
-func (r RSS) ProcessMessage(m *discordgo.MessageCreate, dbPool *pgxpool.Pool) ([]string, *commands.CommandError) {
+func (r RSS) ProcessMessage(
+	response chan<- commands.MessageResponse,
+	m *discordgo.MessageCreate,
+	dbPool *pgxpool.Pool,
+) *commands.CommandError {
 	splitContent := strings.Fields(m.Content)
 	if len(splitContent) < 2 {
-		return nil, commands.NewError("Sure, let me test if that's valid.\n" +
+		return commands.NewError("Sure, let me test if that's valid.\n" +
 			"Here comes the feed: _You are a horrible person_. " +
 			"I'm serious, that's what's in the feed: _\"A horrible person\"_." +
 			" We weren't even testing for that")
@@ -53,24 +57,28 @@ func (r RSS) ProcessMessage(m *discordgo.MessageCreate, dbPool *pgxpool.Pool) ([
 	message := splitContent[1:]
 	switch message[0] {
 	case "list":
-		return listFeeds(dbPool)
+		return listFeeds(response, m.ChannelID, dbPool)
 
 	case "find":
-		return findFeedByID(message, dbPool)
+		return findFeedByID(response, m.ChannelID, message, dbPool)
 
 	case "latest":
-		return fetchLatest(message, dbPool)
+		return fetchLatest(response, m.ChannelID, message, dbPool)
 
 	default:
-		return storeNewFeed(message[0], dbPool)
+		return storeNewFeed(response, m.ChannelID, message[0], dbPool)
 	}
 }
 
-func listFeeds(dbPool *pgxpool.Pool) ([]string, *commands.CommandError) {
+func listFeeds(
+	response chan<- commands.MessageResponse,
+	channelID string,
+	dbPool *pgxpool.Pool,
+) *commands.CommandError {
 	feeds, err := selectAllFeedDB(dbPool)
 	if err != nil {
 		log.Println(err)
-		return nil, commands.NewError("Couldn't get a list of feeds from the database. " +
+		return commands.NewError("Couldn't get a list of feeds from the database. " +
 			"Try again later")
 	}
 	builder := strings.Builder{}
@@ -78,70 +86,99 @@ func listFeeds(dbPool *pgxpool.Pool) ([]string, *commands.CommandError) {
 		builder.WriteString(fmt.Sprintf("ID: %d | %s (%s)\n", info.ID, info.Title, info.URL))
 	}
 	if builder.Len() == 0 {
-		return nil, commands.NewError("Can't list, you haven't subscribed to any feeds yet")
+		return commands.NewError("Can't list, you haven't subscribed to any feeds yet")
 	}
-	return []string{builder.String()}, nil
+	response <- commands.MessageResponse{
+		ChannelID: channelID,
+		Message:   builder.String(),
+	}
+	return nil
 }
 
-func findFeedByID(args []string, dbPool *pgxpool.Pool) ([]string, *commands.CommandError) {
+func findFeedByID(
+	response chan<- commands.MessageResponse,
+	channelID string,
+	args []string,
+	dbPool *pgxpool.Pool,
+) *commands.CommandError {
 	if len(args) == 1 {
-		return nil, commands.NewError("<insert 404 joke here> Look, you didn't provide anything to find")
+		return commands.NewError("<insert 404 joke here> Look, you didn't provide anything to find")
 	}
 	id, err := strconv.ParseInt(args[1], 0, 64)
 	if err != nil {
 		log.Println(err)
-		return nil, commands.NewError(fmt.Sprintf(
+		return commands.NewError(fmt.Sprintf(
 			"Hey, so, uh, I need an _ID_, a number."+
 				" %s is not a number", args[1]))
 	}
 	info, err := selectFeedDB(dbPool, id)
 	if err != nil {
 		log.Println(err)
-		return nil, commands.NewError("I understood the ID, but the database says it's invalid." +
+		return commands.NewError("I understood the ID, but the database says it's invalid." +
 			" Can you double-check?")
 	}
-	return []string{fmt.Sprintf("**%s** <%s>", info.Title, info.URL)}, nil
+	response <- commands.MessageResponse{
+		ChannelID: channelID,
+		Message:   fmt.Sprintf("**%s** <%s>", info.Title, info.URL),
+	}
+	return nil
 }
 
-func fetchLatest(args []string, dbPool *pgxpool.Pool) ([]string, *commands.CommandError) {
+func fetchLatest(
+	response chan<- commands.MessageResponse,
+	channelID string,
+	args []string,
+	dbPool *pgxpool.Pool,
+) *commands.CommandError {
 	if len(args) == 1 {
-		return nil, commands.NewError("**My Database**\nzilch\n\nTry providing an ID to search by")
+		return commands.NewError("**My Database**\nzilch\n\nTry providing an ID to search by")
 	}
 	id, err := strconv.ParseInt(args[1], 0, 64)
 	if err != nil {
 		log.Println(err)
-		return nil, commands.NewError(fmt.Sprintf(
+		return commands.NewError(fmt.Sprintf(
 			"Hey, so, uh, I need an _ID_, a number."+
 				" %s is not a number", args[1]))
 	}
 	info, err := selectFeedDB(dbPool, id)
 	if err != nil {
 		log.Println(err)
-		return nil, commands.NewError("I understood the ID, but the database says it's invalid. " +
+		return commands.NewError("I understood the ID, but the database says it's invalid. " +
 			"Can you double-check?")
 	}
 	url, err := url.Parse(info.URL)
 	if err != nil {
 		log.Println(err)
-		return nil, commands.NewError("This isn't good. Somehow an invalid feed URL was saved into the database for this ID")
+		return commands.NewError("This isn't good. Somehow an invalid feed URL was saved into the database for this ID")
 	}
 	feed, err := RefreshFeed(url)
 	if err != nil {
 		log.Println(err)
-		return nil, commands.NewError("Tried to fetch the feed, but some error occurred reading it")
+		return commands.NewError("Tried to fetch the feed, but some error occurred reading it")
 	}
 	items := ReduceItem(feed.Items, FetchRegex(id, dbPool))
 	urls := make(map[string]struct{})
-	newFeeds := []string{}
+	haveNewFeeds := false
 	for _, item := range items {
 		_, contained := info.LastItems[item.Description]
 		if !contained {
-			newFeeds = append(newFeeds, fmt.Sprintf("%s: **%s**\n%s", info.Title, item.Title, item.Description))
+			haveNewFeeds = true
+			response <- commands.MessageResponse{
+				ChannelID: channelID,
+				Message: fmt.Sprintf("%s: **%s**\n%s",
+					info.Title,
+					item.Title,
+					item.Description),
+			}
 			urls[item.Description] = struct{}{}
 		}
 	}
-	if len(newFeeds) == 0 {
-		return []string{"Nothing new to report"}, nil
+	if !haveNewFeeds {
+		response <- commands.MessageResponse{
+			ChannelID: channelID,
+			Message:   "Nothing new to report",
+		}
+		return nil
 	}
 	tag, err := dbPool.Exec(context.Background(), RSSUpdateLastItem, func() map[string]struct{} {
 		for desc := range info.LastItems {
@@ -151,32 +188,44 @@ func fetchLatest(args []string, dbPool *pgxpool.Pool) ([]string, *commands.Comma
 	}(), id)
 	if err != nil {
 		log.Println(err)
-		return nil, commands.NewError("Internal errors." +
+		return commands.NewError("Internal errors." +
 			" Couldn't save these new items as posted." +
 			" They may be reposted.")
 	}
 	log.Printf("RSS: %s (actually inserted %d items for %d)", tag, len(urls), id)
-	return newFeeds, nil
+	return nil
 }
 
-func storeNewFeed(userMsg string, dbPool *pgxpool.Pool) ([]string, *commands.CommandError) {
+func storeNewFeed(
+	response chan<- commands.MessageResponse,
+	channelID string,
+	userMsg string,
+	dbPool *pgxpool.Pool,
+) *commands.CommandError {
 	url, err := url.Parse(userMsg)
 	if err != nil {
 		log.Println(err)
-		return nil, commands.NewError(fmt.Sprintf("%s doesn't seem to be a valid URL", userMsg))
+		return commands.NewError(fmt.Sprintf("%s doesn't seem to be a valid URL", userMsg))
 	}
 	url.Scheme = "https"
 	feed, err := RefreshFeed(url)
 	if err != nil {
 		log.Println(err)
-		return nil, commands.NewError("Tried to fetch the feed, but some error occurred reading it")
+		return commands.NewError("Tried to fetch the feed, but some error occurred reading it")
 	}
 	feed.Title = html2text.HTML2Text(feed.Title)
-	var rssFeed string
 	if len(feed.Description) != 0 {
-		rssFeed = fmt.Sprintf("Fetched **%s** _(%s)_", feed.Title, html2text.HTML2Text(feed.Description))
+		response <- commands.MessageResponse{
+			ChannelID: channelID,
+			Message: fmt.Sprintf("Fetched **%s** _(%s)_",
+				feed.Title,
+				html2text.HTML2Text(feed.Description)),
+		}
 	} else {
-		rssFeed = fmt.Sprintf("Fetched **%s**", feed.Title)
+		response <- commands.MessageResponse{
+			ChannelID: channelID,
+			Message:   fmt.Sprintf("Fetched **%s**", feed.Title),
+		}
 	}
 	existing := make(map[string]struct{})
 	for _, item := range ReduceItem(feed.Items, nil) {
@@ -185,27 +234,27 @@ func storeNewFeed(userMsg string, dbPool *pgxpool.Pool) ([]string, *commands.Com
 	tag, err := dbPool.Exec(context.Background(), rssNewFeed, html2text.HTML2Text(feed.Title), url.String(), existing)
 	if err != nil {
 		log.Println(err)
-		return nil, commands.NewError("Went to insert this feed into the database for later, and it didn't seem to like that." +
+		return commands.NewError("Went to insert this feed into the database for later, and it didn't seem to like that." +
 			" Maybe provide a less spicy feed? Or try some Pepto-Bismol")
 	}
 	log.Printf("RSS: %s (actually inserted row with Title %s, URL %s, and %d Existing items at insertion time)", tag,
 		html2text.HTML2Text(feed.Title),
 		url.String(),
 		len(existing))
-	return []string{rssFeed}, nil
+	return nil
 }
 
 // CommandList returns a list of aliases for the RSS Command
 func (r RSS) CommandList() []string {
-	return []string{"!rss"}
+	return []string{"rss"}
 }
 
 // Help returns the help message for the RSS Command
 func (r RSS) Help() string {
 	return "Subscribes to an RSS feed\n" +
-		"- `!rss list` lists all subscribed RSS feeds\n" +
-		"- `!rss find <id>` finds an RSS feed by it's numerical ID\n" +
-		"- `!rss latest <id>` re-fetches the latest element of the feed and (if it hasn't already been posted) posts it"
+		"- `rss list` lists all subscribed RSS feeds\n" +
+		"- `rss find <id>` finds an RSS feed by it's numerical ID\n" +
+		"- `rss latest <id>` re-fetches the latest element of the feed and (if it hasn't already been posted) posts it"
 }
 
 // RSSInfo contains the posted information for a RSS feed item
