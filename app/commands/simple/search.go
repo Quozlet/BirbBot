@@ -58,7 +58,11 @@ func (s Search) ProcessMessage(
 		log.Println(err)
 		return commands.NewError("Failed to hear back from the server")
 	}
-	defer response.Body.Close()
+	defer func() {
+		if err := response.Body.Close(); err != nil {
+			log.Println(err)
+		}
+	}()
 	search := SearchResponse{}
 	if err := json.NewDecoder(response.Body).Decode(&search); err != nil {
 		log.Println(err)

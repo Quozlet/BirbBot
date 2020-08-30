@@ -1,2 +1,6 @@
-.git/
-.env.example
+*
+!app/
+!*.go
+!go*
+!pre-commit
+!semgrep/

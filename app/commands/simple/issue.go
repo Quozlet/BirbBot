@@ -48,7 +48,7 @@ func (i Issue) Check() error {
 	repositoryID = repoInfo.Repository.ID
 	bugLabelID = repoInfo.Repository.Label.ID
 	if repositoryID == "" || bugLabelID == "" {
-		return errors.New("Failed to get necessary IDs")
+		return errors.New("failed to get necessary IDs")
 	}
 	return nil
 }

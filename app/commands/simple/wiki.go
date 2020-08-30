@@ -47,7 +47,11 @@ func (w Wiki) ProcessMessage(
 		log.Println(err)
 		return commands.NewError("Didn't hear back from Wikipedia about that article")
 	}
-	defer response.Body.Close()
+	defer func() {
+		if err := response.Body.Close(); err != nil {
+			log.Println(err)
+		}
+	}()
 	wiki := wikiResponse{}
 	if err := json.NewDecoder(response.Body).Decode(&wiki); err != nil {
 		log.Println(err)

@@ -23,7 +23,7 @@ var recurringCommands = map[recurring.Frequency][]*RecurringCommand{}
 // Start a Discord session for a given token
 func Start(secret string, dbPool *pgxpool.Pool, ticker *Timers) (*discordgo.Session, error) {
 	if len(secret) == 0 {
-		return nil, errors.New("Not attempting connection, secret seems incorrect")
+		return nil, errors.New("not attempting connection, secret seems incorrect")
 	}
 	commandMap, commandList := discoverCommand(dbPool)
 	session, err := discordgo.New("Bot " + secret)

@@ -241,7 +241,7 @@ func createWeatherURL(location []string, authorID string, dbPool *pgxpool.Pool) 
 		if err := dbPool.QueryRow(context.Background(), weatherSelect, authorID).Scan(&savedLocation); err != nil {
 			return nil, err
 		} else if len(savedLocation) == 0 {
-			return nil, errors.New("Provide (or set) a location to get the weather for :)")
+			return nil, errors.New("provide (or set) a location to get the weather for :)")
 		}
 		savedLocationURL, err := url.Parse(savedLocation)
 		if err != nil {
@@ -274,7 +274,11 @@ func weatherResponse(url *url.URL) (string, error) {
 		return "", err
 	}
 	body, err := ioutil.ReadAll(response.Body)
-	defer response.Body.Close()
+	defer func() {
+		if err := response.Body.Close(); err != nil {
+			log.Println(err)
+		}
+	}()
 	if err != nil {
 		return "", err
 	}
@@ -302,7 +306,11 @@ func dataWeather(url *url.URL) (*weatherReport, error) {
 		return nil, err
 	}
 	report := weatherReport{}
-	defer response.Body.Close()
+	defer func() {
+		if err := response.Body.Close(); err != nil {
+			log.Println(err)
+		}
+	}()
 	if err := json.NewDecoder(response.Body).Decode(&report); err != nil {
 		return nil, err
 	}

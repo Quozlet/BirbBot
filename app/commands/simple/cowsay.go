@@ -25,7 +25,7 @@ func (c Cowsay) Check() error {
 		return err
 	}
 	if len(cows) == 0 {
-		return errors.New("Failure occurred reading in the list of possible cows")
+		return errors.New("failure occurred reading in the list of possible cows")
 	}
 	return nil
 }

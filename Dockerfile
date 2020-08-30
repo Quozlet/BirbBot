@@ -1,11 +1,17 @@
+FROM returntocorp/semgrep:581891502a50f06f30bca9e3306d36e87174bcca
+COPY . .
+RUN semgrep -f /semgrep/go.yml /
+
 FROM golang:1.15.0-alpine3.12 AS build
 WORKDIR /build
 # Caches all the dependency downloads
 COPY ["go.mod", "go.sum", "./"]
 RUN apk add --no-cache --update git \
     && go get github.com/securego/gosec/cmd/gosec \
-    && go get -u golang.org/x/lint/golint && \
-    go mod download
+    && go get -u golang.org/x/lint/golint \
+    && go get -u github.com/kisielk/errcheck \
+    && go get honnef.co/go/tools/cmd/staticcheck \
+    && go mod download
 COPY . .
 # Cache linting binaries
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 ./pre-commit \

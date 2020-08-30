@@ -7,12 +7,24 @@ if command -v golint >/dev/null; then
 	echo "Found golint, linting"
 	find . -regex ".*\.go" -exec golint {} \;
 else
-	echo "Warning, couldn't find golint, not running" >&2
+	echo "Warning, couldn't find golint, skipping" >&2
 fi
 if command -v gosec >/dev/null; then
 	echo "Found gosec, checking for security issues..."
 	gosec ./...
 else
-	echo "Warning, couldn't find gosec, not running" >&2
+	echo "Warning, couldn't find gosec, skipping" >&2
+fi
+if command -v errcheck >/dev/null; then
+	echo "Found errcheck, checking for ignored errors..."
+	errcheck ./...
+else
+	echo "Warning, couldn't find errcheck, skipping" >&2
+fi
+if command -v staticcheck >/dev/null; then
+	echo "Found staticcheck, analyzing..."
+	staticcheck ./...
+else
+	echo "Warning, couldn't find staticcheck, skipping" >&2
 fi
 echo "Finished linting, no issues!"
