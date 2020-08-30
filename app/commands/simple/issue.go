@@ -84,9 +84,11 @@ func (i Issue) ProcessMessage(
 	req.Var("label", label)
 	var issueData IssueData
 	req.Header.Set("Authorization", fmt.Sprintf("bearer %s", os.Getenv("GITHUB_TOKEN")))
-	if err := client.Run(context.Background(), req, &issueData); err != nil {
-		log.Println(err)
-		return commands.NewError("Failed to make the issue")
+	if commandError := commands.CreateCommandError(
+		"Failed to make the issue",
+		client.Run(context.Background(), req, &issueData),
+	); commandError != nil {
+		return commandError
 	}
 	log.Printf("%+v", issueData)
 	response <- commands.MessageResponse{

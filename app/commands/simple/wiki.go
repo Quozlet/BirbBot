@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"strings"
 
+	handler "quozlet.net/birbbot/util"
+
 	"github.com/bwmarrin/discordgo"
 	"quozlet.net/birbbot/app/commands"
 )
@@ -20,10 +22,7 @@ type Wiki struct{}
 // Check asserts the base Wikipedia API URL is valid
 func (w Wiki) Check() error {
 	_, err := url.Parse(wikiURL)
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 // ProcessMessage searches for a Wikipedia article by title
@@ -31,31 +30,34 @@ func (w Wiki) ProcessMessage(
 	msgResponse chan<- commands.MessageResponse,
 	m *discordgo.MessageCreate,
 ) *commands.CommandError {
+	var commandError *commands.CommandError
 	splitContent := strings.Fields(m.Content)
 	if len(splitContent) == 1 {
 		return commands.NewError("You didn't provide anything to look for on Wikipedia")
 	}
 	title := url.QueryEscape(strings.Join(splitContent[1:], "_"))
 	wikiURL, err := url.Parse(wikiURL + title)
+	if commandError = commands.CreateCommandError(
+		"Failed to make that query into a request",
+		err,
+	); commandError != nil {
+		return commandError
+	}
 	log.Println(wikiURL)
-	if err != nil {
-		log.Println(err)
-		return commands.NewError("Failed to make that query into a request")
-	}
 	response, err := http.Get(wikiURL.String())
-	if err != nil {
-		log.Println(err)
-		return commands.NewError("Didn't hear back from Wikipedia about that article")
+	if commandError = commands.CreateCommandError(
+		"Didn't hear back from Wikipedia about that article",
+		err,
+	); commandError != nil {
+		return commandError
 	}
-	defer func() {
-		if err := response.Body.Close(); err != nil {
-			log.Println(err)
-		}
-	}()
+	defer handler.LogError(response.Body.Close())
 	wiki := wikiResponse{}
-	if err := json.NewDecoder(response.Body).Decode(&wiki); err != nil {
-		log.Println(err)
-		return commands.NewError("Heard back from Wikipedia, but couldn't process the response")
+	if commandError = commands.CreateCommandError(
+		"Heard back from Wikipedia, but couldn't process the response",
+		json.NewDecoder(response.Body).Decode(&wiki),
+	); commandError != nil {
+		return commandError
 	}
 	if len(wiki.Description) == 0 || len(wiki.ContentURLs.Desktop.Page) == 0 {
 		log.Printf("+%v", wiki)

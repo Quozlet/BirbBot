@@ -6,6 +6,8 @@ import (
 	"log"
 	"net/url"
 
+	handler "quozlet.net/birbbot/util"
+
 	"github.com/jackc/pgx/v4/pgxpool"
 	"quozlet.net/birbbot/app/commands/persistent"
 )
@@ -68,9 +70,7 @@ func (s SubCheck) Check(dbPool *pgxpool.Pool) map[string][]string {
 			}
 			return urls
 		}(), id)
-		if err != nil {
-			log.Println(err)
-		}
+		handler.LogError(err)
 		log.Printf("SubCheck: %s (for ID %d)", tag, id)
 	}
 	if err := rows.Err(); err != nil {

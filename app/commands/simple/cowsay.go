@@ -46,9 +46,11 @@ func (c Cowsay) ProcessMessage(
 	// OK to run user provided input
 	/* #nosec */
 	cowsay, err := exec.Command("cowsay", "-f", cow, cowMsg).Output()
-	if err != nil {
-		log.Println(err)
-		return commands.NewError("Something bad happened when I asked the cow to say that...")
+	if commandError := commands.CreateCommandError(
+		"Something bad happened when I asked the cow to say that...",
+		err,
+	); commandError != nil {
+		return commandError
 	}
 	response <- commands.MessageResponse{
 		ChannelID: m.ChannelID,

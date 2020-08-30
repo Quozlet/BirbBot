@@ -36,25 +36,30 @@ func (s Sub) ProcessMessage(
 	m *discordgo.MessageCreate,
 	dbPool *pgxpool.Pool,
 ) *commands.CommandError {
+	var commandError *commands.CommandError
 	splitContent := strings.Fields(m.Content)
 	if len(splitContent) < 2 {
-		return commands.NewError("`!sub` requires arguments")
+		return commands.NewError("`sub` requires arguments")
 	}
 	message := splitContent[1:]
 	switch message[0] {
 	case "list":
 		rows, err := dbPool.Query(context.Background(), subList)
-		if err != nil {
-			log.Println(err)
-			return commands.NewError("Couldn't read a list of subscriptions from the database!")
+		if commandError = commands.CreateCommandError(
+			"Couldn't read a list of subscriptions from the database!",
+			err,
+		); commandError != nil {
+			return commandError
 		}
 		haveActiveSubs := false
 		for rows.Next() {
 			var channel string
 			var id int64
-			if err := rows.Scan(&id, &channel); err != nil {
-				log.Println(err)
-				return commands.NewError("An error occurred reading a certain subscription's information. Aborting")
+			if commandError = commands.CreateCommandError(
+				"An error occurred reading a certain subscription's information. Aborting",
+				rows.Scan(&id, &channel),
+			); commandError != nil {
+				return commandError
 			}
 			haveActiveSubs = true
 			response <- commands.MessageResponse{
@@ -62,9 +67,11 @@ func (s Sub) ProcessMessage(
 				Message:   fmt.Sprintf("%d -> <#%s>", id, channel),
 			}
 		}
-		if err := rows.Err(); err != nil {
-			log.Println(err)
-			return commands.NewError("An error occurred fetching the subscriptions")
+		if commandError = commands.CreateCommandError(
+			"An error occurred fetching the subscriptions",
+			rows.Err(),
+		); commandError != nil {
+			return commandError
 		}
 		if !haveActiveSubs {
 			response <- commands.MessageResponse{
@@ -76,16 +83,20 @@ func (s Sub) ProcessMessage(
 
 	default:
 		id, err := strconv.ParseInt(splitContent[1], 0, 64)
-		if err != nil {
-			log.Println(err)
-			return commands.NewError(fmt.Sprintf("%s is not a valid ID, so I can't look up a feed using it", splitContent[1]))
+		if commandError = commands.CreateCommandError(
+			fmt.Sprintf("%s is not a valid ID, so I can't look up a feed using it", splitContent[1]),
+			err,
+		); commandError != nil {
+			return commandError
 		}
 		channelID := string([]rune(splitContent[2])[2:20])
 		tag, err := dbPool.Exec(context.Background(), subInsert, id, channelID)
-		if err != nil {
-			log.Println(err)
-			return commands.NewError("Failed to associate the feed with the channel." +
-				" Check that the ID exists")
+		if commandError = commands.CreateCommandError(
+			"Failed to associate the feed with the channel."+
+				" Check that the ID exists",
+			err,
+		); commandError != nil {
+			return commandError
 		}
 		log.Printf("Sub: %s (actually inserted %d, %s)", tag, id, channelID)
 		response <- commands.MessageResponse{

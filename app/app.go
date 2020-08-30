@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"strings"
 
+	handler "quozlet.net/birbbot/util"
+
 	"github.com/bwmarrin/discordgo"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"quozlet.net/birbbot/app/commands"
@@ -42,7 +44,7 @@ func Start(secret string, dbPool *pgxpool.Pool, ticker *Timers) (*discordgo.Sess
 		}
 		commandHandler(s, m, dbPool, commandMap, commandList, messageChannel)
 	})
-	ticker.Start(recurringCommands, dbPool, session)
+	go ticker.Start(recurringCommands, dbPool, session)
 	if err = session.Open(); err != nil {
 		log.Println("Failed to open WebSocket connection to Discord servers")
 		return nil, err
@@ -178,36 +180,30 @@ func waitForCommandResponses(session *discordgo.Session, messageChannel <-chan c
 	for pendingMsg := range messageChannel {
 		if len(pendingMsg.Reaction.MessageID) != 0 {
 			if len(pendingMsg.Reaction.Add) != 0 {
-				if err := session.MessageReactionAdd(
-					pendingMsg.ChannelID,
-					pendingMsg.Reaction.MessageID,
-					pendingMsg.Reaction.Add,
-				); err != nil {
-					log.Printf("Failed to add reaction %s: %s",
+				handler.LogErrorMsg(
+					fmt.Sprintf("Failed to add reaction %s", pendingMsg.Reaction.Add),
+					session.MessageReactionAdd(
+						pendingMsg.ChannelID,
+						pendingMsg.Reaction.MessageID,
 						pendingMsg.Reaction.Add,
-						err.Error(),
-					)
-				}
+					),
+				)
 			}
 			if len(pendingMsg.Reaction.Remove) != 0 {
-				if err := session.MessageReactionRemove(
-					pendingMsg.ChannelID,
-					pendingMsg.Reaction.MessageID,
-					pendingMsg.Reaction.Remove,
-					session.State.User.ID,
-				); err != nil {
-					log.Printf("Failed to remove reaction %s: %s",
+				handler.LogErrorMsg(
+					fmt.Sprintf("Failed to remove reaction %s", pendingMsg.Reaction.Remove),
+					session.MessageReactionRemove(
+						pendingMsg.ChannelID,
+						pendingMsg.Reaction.MessageID,
 						pendingMsg.Reaction.Remove,
-						err.Error(),
-					)
-				}
+						session.State.User.ID,
+					),
+				)
 			}
 		}
 		if len(pendingMsg.Message) != 0 {
 			_, err := session.ChannelMessageSend(pendingMsg.ChannelID, pendingMsg.Message)
-			if err != nil {
-				log.Println(err)
-			}
+			handler.LogError(err)
 		}
 	}
 }

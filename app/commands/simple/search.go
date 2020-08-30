@@ -10,6 +10,7 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"quozlet.net/birbbot/app/commands"
+	handler "quozlet.net/birbbot/util"
 )
 
 const searchURL = "https://searx.xyz/search?format=json&lang=en"
@@ -20,10 +21,7 @@ type Search struct{}
 // Check that the query URL is valid
 func (s Search) Check() error {
 	_, err := url.Parse(searchURL)
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 // ProcessMessage with search query and return first result
@@ -31,6 +29,7 @@ func (s Search) ProcessMessage(
 	msgResponse chan<- commands.MessageResponse,
 	m *discordgo.MessageCreate,
 ) *commands.CommandError {
+	var commandError *commands.CommandError
 	splitContent := strings.Fields(m.Content)
 	if len(splitContent) == 1 {
 		return commands.NewError("Can't search for nothing." +
@@ -39,34 +38,38 @@ func (s Search) ProcessMessage(
 			" Provide some input next time")
 	}
 	searchURL, err := url.Parse(searchURL)
-	if err != nil {
-		log.Println(err)
-		return commands.NewError("Failed to make that query into searchable text")
+	if commandError = commands.CreateCommandError(
+		"Failed to make that query into searchable text",
+		err,
+	); commandError != nil {
+		return commandError
 	}
 	q := searchURL.Query()
 	q.Set("q", url.QueryEscape(strings.Join(splitContent[1:], " ")))
 	searchURL.RawQuery = q.Encode()
 	request, err := http.NewRequest("GET", searchURL.String(), nil)
-	if err != nil {
-		log.Println(err)
-		return commands.NewError("Failure occurred while constructing request")
+	if commandError = commands.CreateCommandError(
+		"Failure occurred while constructing request",
+		err,
+	); commandError != nil {
+		return commandError
 	}
 	request.Header.Set("User-Agent", "birbbot")
 	log.Printf("Searching %s", searchURL.String())
 	response, err := (&http.Client{}).Do(request)
-	if err != nil {
-		log.Println(err)
-		return commands.NewError("Failed to hear back from the server")
+	if commandError = commands.CreateCommandError(
+		"Failed to hear back from the server",
+		err,
+	); commandError != nil {
+		return commandError
 	}
-	defer func() {
-		if err := response.Body.Close(); err != nil {
-			log.Println(err)
-		}
-	}()
+	defer handler.LogError(response.Body.Close())
 	search := SearchResponse{}
-	if err := json.NewDecoder(response.Body).Decode(&search); err != nil {
-		log.Println(err)
-		return commands.NewError("Heard back, but couldn't process the response")
+	if commandError = commands.CreateCommandError(
+		"Heard back, but couldn't process the response",
+		json.NewDecoder(response.Body).Decode(&search),
+	); commandError != nil {
+		return commandError
 	}
 	if len(search.Results) == 0 {
 		return commands.NewError("No results found")

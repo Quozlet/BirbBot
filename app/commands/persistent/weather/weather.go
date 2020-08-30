@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"strings"
 
+	handler "quozlet.net/birbbot/util"
+
 	"github.com/bwmarrin/discordgo"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"quozlet.net/birbbot/app/commands"
@@ -30,6 +32,7 @@ func (w Weather) ProcessMessage(
 	m *discordgo.MessageCreate,
 	dbPool *pgxpool.Pool,
 ) *commands.CommandError {
+	var commandError *commands.CommandError
 	splitCmd := strings.Fields(m.Content)
 	if len(splitCmd) != 0 {
 		log.Println("Valid weather command")
@@ -52,17 +55,21 @@ func (w Weather) ProcessMessage(
 		}
 
 		url, err := createWeatherURL(splitCmd[1:], m.Author.ID, dbPool)
-		if err != nil {
-			log.Println(err)
-			return commands.NewError("Tried to create plan to get weather, but it failed. " +
-				"If this occurred when you thought a location was set, it probably isn't")
+		if commandError = commands.CreateCommandError(
+			"Tried to create plan to get weather, but it failed. "+
+				"If this occurred when you thought a location was set, it probably isn't",
+			err,
+		); commandError != nil {
+			return commandError
 		}
 		// Current forecast (lines 1-7)
 		forecast, weatherErr := detailedWeather(url, 1, 7)
-		if weatherErr != nil {
-			log.Println(err)
-			return commands.NewError("Unable to get the weather!" +
-				" Sorry")
+		if commandError = commands.CreateCommandError(
+			"Unable to get the weather!"+
+				" Sorry",
+			weatherErr,
+		); commandError != nil {
+			return commandError
 		}
 		response <- commands.MessageResponse{
 			ChannelID: m.ChannelID,
@@ -96,18 +103,23 @@ func handleClassic(
 	discordUserID string,
 	dbPool *pgxpool.Pool,
 ) *commands.CommandError {
+	var commandError *commands.CommandError
 	url, err := createWeatherURL(location, discordUserID, dbPool)
-	if err != nil {
-		log.Println(err)
-		return commands.NewError("Tried to create plan to get weather, but it failed.")
+	if commandError = commands.CreateCommandError(
+		"Tried to create plan to get weather, but it failed.",
+		err,
+	); commandError != nil {
+		return commandError
 	}
 	q := url.Query()
 	q.Set("format", "j1")
 	url.RawQuery = q.Encode()
 	body, err := dataWeather(url)
-	if err != nil {
-		log.Println(err)
-		return commands.NewError("Tried to get the weather forecast, but couldn't fetch it")
+	if commandError = commands.CreateCommandError(
+		"Tried to get the weather forecast, but couldn't fetch it",
+		err,
+	); commandError != nil {
+		return commandError
 	}
 	var precip string
 	if body.Weather[0].Hourly[0].ChanceOfRain < body.Weather[0].Hourly[0].ChanceOfSnow {
@@ -146,18 +158,23 @@ func handleSimple(
 	discordUserID string,
 	dbPool *pgxpool.Pool,
 ) *commands.CommandError {
+	var commandError *commands.CommandError
 	url, err := createWeatherURL(location, discordUserID, dbPool)
-	if err != nil {
-		log.Println(err)
-		return commands.NewError("Tried to create plan to get weather, but it failed.")
+	if commandError = commands.CreateCommandError(
+		"Tried to create plan to get weather, but it failed.",
+		err,
+	); commandError != nil {
+		return commandError
 	}
 	q := url.Query()
 	q.Set("format", "4")
 	url.RawQuery = q.Encode()
 	body, err := weatherResponse(url)
-	if err != nil {
-		log.Println(err)
-		return commands.NewError("Tried to get the weather forecast, but couldn't fetch it")
+	if commandError = commands.CreateCommandError(
+		"Tried to get the weather forecast, but couldn't fetch it",
+		err,
+	); commandError != nil {
+		return commandError
 	}
 	if len(location) == 0 {
 		response <- commands.MessageResponse{
@@ -180,26 +197,33 @@ func setWeatherPreference(
 	discordUserID string,
 	dbPool *pgxpool.Pool,
 ) *commands.CommandError {
+	var commandError *commands.CommandError
 	url, urlErr := createWeatherURL(location, discordUserID, dbPool)
-	if urlErr != nil {
-		log.Println(urlErr)
-		return commands.NewError("Tried to create plan to get weather, but it failed.")
+	if commandError = commands.CreateCommandError(
+		"Tried to create plan to get weather, but it failed.",
+		urlErr,
+	); commandError != nil {
+		return commandError
 	}
 	tag, err := dbPool.Exec(context.Background(), weatherNewDefault, discordUserID, url.String())
-	if err != nil {
-		log.Println(err)
-		return commands.NewError("Sorry, I couldn't save your location." +
-			" An error occured")
+	if commandError = commands.CreateCommandError(
+		"Sorry, I couldn't save your location."+
+			" An error occured",
+		err,
+	); commandError != nil {
+		return commandError
 	}
 	log.Printf("Weather: %s (actually inserted %s for Discord user %s)", tag, weatherNewDefault, discordUserID)
 	q := url.Query()
 	q.Set("format", "j1")
 	url.RawQuery = q.Encode()
 	body, weatherLocationErr := dataWeather(url)
-	if weatherLocationErr != nil {
-		log.Println(weatherLocationErr)
-		return commands.NewError("Your weather location was saved, but (FYI) I couldn't figure out the closes weather station." +
-			" Double check it's a valid location")
+	if commandError = commands.CreateCommandError(
+		"Your weather location was saved, but (FYI) I couldn't figure out the closes weather station."+
+			" Double check it's a valid location",
+		weatherLocationErr,
+	); commandError != nil {
+		return commandError
 	}
 	response <- commands.MessageResponse{
 		ChannelID: channelID,
@@ -218,12 +242,15 @@ func clearWeatherPreference(
 	discordUserID string,
 	dbPool *pgxpool.Pool,
 ) *commands.CommandError {
+	var commandError *commands.CommandError
 	tag, err := dbPool.Exec(context.Background(), weatherDrop, discordUserID)
-	if err != nil {
-		log.Println(err)
-		return commands.NewError("Couldn't clear the database." +
-			" A database error occured." +
-			" Try again later or contact the server owner")
+	if commandError = commands.CreateCommandError(
+		"Couldn't clear the database."+
+			" A database error occured."+
+			" Try again later or contact the server owner",
+		err,
+	); commandError != nil {
+		return commandError
 	}
 	log.Printf("Weather: %s (actually remove default %s for a user)", tag, weatherDrop)
 	response <- commands.MessageResponse{
@@ -274,11 +301,7 @@ func weatherResponse(url *url.URL) (string, error) {
 		return "", err
 	}
 	body, err := ioutil.ReadAll(response.Body)
-	defer func() {
-		if err := response.Body.Close(); err != nil {
-			log.Println(err)
-		}
-	}()
+	defer handler.LogError(response.Body.Close())
 	if err != nil {
 		return "", err
 	}
@@ -306,11 +329,7 @@ func dataWeather(url *url.URL) (*weatherReport, error) {
 		return nil, err
 	}
 	report := weatherReport{}
-	defer func() {
-		if err := response.Body.Close(); err != nil {
-			log.Println(err)
-		}
-	}()
+	defer handler.LogError(response.Body.Close())
 	if err := json.NewDecoder(response.Body).Decode(&report); err != nil {
 		return nil, err
 	}

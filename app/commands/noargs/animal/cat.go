@@ -1,7 +1,6 @@
 package animal
 
 import (
-	"log"
 	"net/url"
 
 	"quozlet.net/birbbot/app/commands"
@@ -13,10 +12,7 @@ type Cat struct{}
 // Check if the cat URL is valid
 func (c Cat) Check() error {
 	_, err := url.Parse(catURL)
-	if err != nil {
-		log.Println(err)
-	}
-	return nil
+	return err
 }
 
 // ProcessMessage for a Cat Command (will return the URL for a random cat image)

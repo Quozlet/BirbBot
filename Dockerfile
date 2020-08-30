@@ -1,6 +1,7 @@
 FROM returntocorp/semgrep:581891502a50f06f30bca9e3306d36e87174bcca
+WORKDIR /lint
 COPY . .
-RUN semgrep -f /semgrep/go.yml /
+RUN semgrep -f /lint/semgrep/go.yml /lint/
 
 FROM golang:1.15.0-alpine3.12 AS build
 WORKDIR /build

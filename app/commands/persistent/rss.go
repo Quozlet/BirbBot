@@ -17,6 +17,9 @@ import (
 	"quozlet.net/birbbot/app/commands"
 )
 
+const invalidRSSIDErrorMsg = "Hey, so, uh, I need an _ID_, a number. %s is not a number"
+const missingRSSIDErrorMsg = "I understood the ID, but the database says it's invalid. Can you double-check?"
+
 // TODO: Finalize schema with RSS/Sub combined w/ proper handling of CASCADE etc.
 const rssTableDefinition string = "CREATE TABLE IF NOT EXISTS Feeds (ID SERIAL PRIMARY KEY, Title TEXT NOT NULL, URL TEXT UNIQUE NOT NULL, LastItems JSONB NOT NULL)"
 const rssNewFeed string = "INSERT INTO Feeds(Title, URL, LastItems) VALUES ($1, $2, $3) ON CONFLICT (URL) DO NOTHING"
@@ -75,11 +78,14 @@ func listFeeds(
 	channelID string,
 	dbPool *pgxpool.Pool,
 ) *commands.CommandError {
+	var commandError *commands.CommandError
 	feeds, err := selectAllFeedDB(dbPool)
-	if err != nil {
-		log.Println(err)
-		return commands.NewError("Couldn't get a list of feeds from the database. " +
-			"Try again later")
+	if commandError = commands.CreateCommandError(
+		"Couldn't get a list of feeds from the database. "+
+			"Try again later",
+		err,
+	); commandError != nil {
+		return commandError
 	}
 	builder := strings.Builder{}
 	for _, info := range feeds {
@@ -101,21 +107,23 @@ func findFeedByID(
 	args []string,
 	dbPool *pgxpool.Pool,
 ) *commands.CommandError {
+	var commandError *commands.CommandError
 	if len(args) == 1 {
 		return commands.NewError("<insert 404 joke here> Look, you didn't provide anything to find")
 	}
 	id, err := strconv.ParseInt(args[1], 0, 64)
-	if err != nil {
-		log.Println(err)
-		return commands.NewError(fmt.Sprintf(
-			"Hey, so, uh, I need an _ID_, a number."+
-				" %s is not a number", args[1]))
+	if commandError = commands.CreateCommandError(
+		fmt.Sprintf(invalidRSSIDErrorMsg, args[1]),
+		err,
+	); commandError != nil {
+		return commandError
 	}
 	info, err := selectFeedDB(dbPool, id)
-	if err != nil {
-		log.Println(err)
-		return commands.NewError("I understood the ID, but the database says it's invalid." +
-			" Can you double-check?")
+	if commandError = commands.CreateCommandError(
+		missingRSSIDErrorMsg,
+		err,
+	); commandError != nil {
+		return commandError
 	}
 	response <- commands.MessageResponse{
 		ChannelID: channelID,
@@ -130,31 +138,37 @@ func fetchLatest(
 	args []string,
 	dbPool *pgxpool.Pool,
 ) *commands.CommandError {
+	var commandError *commands.CommandError
 	if len(args) == 1 {
 		return commands.NewError("**My Database**\nzilch\n\nTry providing an ID to search by")
 	}
 	id, err := strconv.ParseInt(args[1], 0, 64)
-	if err != nil {
-		log.Println(err)
-		return commands.NewError(fmt.Sprintf(
-			"Hey, so, uh, I need an _ID_, a number."+
-				" %s is not a number", args[1]))
+	if commandError = commands.CreateCommandError(
+		fmt.Sprintf(invalidRSSIDErrorMsg, args[1]),
+		err,
+	); commandError != nil {
+		return commandError
 	}
 	info, err := selectFeedDB(dbPool, id)
-	if err != nil {
-		log.Println(err)
-		return commands.NewError("I understood the ID, but the database says it's invalid. " +
-			"Can you double-check?")
+	if commandError = commands.CreateCommandError(
+		missingRSSIDErrorMsg,
+		err,
+	); commandError != nil {
+		return commandError
 	}
 	url, err := url.Parse(info.URL)
-	if err != nil {
-		log.Println(err)
-		return commands.NewError("This isn't good. Somehow an invalid feed URL was saved into the database for this ID")
+	if commandError = commands.CreateCommandError(
+		"This isn't good. Somehow an invalid feed URL was saved into the database for this ID",
+		err,
+	); commandError != nil {
+		return commandError
 	}
 	feed, err := RefreshFeed(url)
-	if err != nil {
-		log.Println(err)
-		return commands.NewError("Tried to fetch the feed, but some error occurred reading it")
+	if commandError = commands.CreateCommandError(
+		"Tried to fetch the feed, but some error occurred reading it",
+		err,
+	); commandError != nil {
+		return commandError
 	}
 	items := ReduceItem(feed.Items, FetchRegex(id, dbPool))
 	urls := make(map[string]struct{})
@@ -186,11 +200,13 @@ func fetchLatest(
 		}
 		return urls
 	}(), id)
-	if err != nil {
-		log.Println(err)
-		return commands.NewError("Internal errors." +
-			" Couldn't save these new items as posted." +
-			" They may be reposted.")
+	if commandError = commands.CreateCommandError(
+		"Internal errors."+
+			" Couldn't save these new items as posted."+
+			" They may be reposted.",
+		err,
+	); commandError != nil {
+		return commandError
 	}
 	log.Printf("RSS: %s (actually inserted %d items for %d)", tag, len(urls), id)
 	return nil
@@ -202,16 +218,21 @@ func storeNewFeed(
 	userMsg string,
 	dbPool *pgxpool.Pool,
 ) *commands.CommandError {
+	var commandError *commands.CommandError
 	url, err := url.Parse(userMsg)
-	if err != nil {
-		log.Println(err)
-		return commands.NewError(fmt.Sprintf("%s doesn't seem to be a valid URL", userMsg))
+	if commandError = commands.CreateCommandError(
+		fmt.Sprintf("%s doesn't seem to be a valid URL", userMsg),
+		err,
+	); commandError != nil {
+		return commandError
 	}
 	url.Scheme = "https"
 	feed, err := RefreshFeed(url)
-	if err != nil {
-		log.Println(err)
-		return commands.NewError("Tried to fetch the feed, but some error occurred reading it")
+	if commandError = commands.CreateCommandError(
+		"Tried to fetch the feed, but some error occurred reading it",
+		err,
+	); commandError != nil {
+		return commandError
 	}
 	feed.Title = html2text.HTML2Text(feed.Title)
 	if len(feed.Description) != 0 {
@@ -232,10 +253,12 @@ func storeNewFeed(
 		existing[item.Description] = struct{}{}
 	}
 	tag, err := dbPool.Exec(context.Background(), rssNewFeed, html2text.HTML2Text(feed.Title), url.String(), existing)
-	if err != nil {
-		log.Println(err)
-		return commands.NewError("Went to insert this feed into the database for later, and it didn't seem to like that." +
-			" Maybe provide a less spicy feed? Or try some Pepto-Bismol")
+	if commandError = commands.CreateCommandError(
+		"Went to insert this feed into the database for later, and it didn't seem to like that."+
+			" Maybe provide a less spicy feed? Or try some Pepto-Bismol",
+		err,
+	); commandError != nil {
+		return commandError
 	}
 	log.Printf("RSS: %s (actually inserted row with Title %s, URL %s, and %d Existing items at insertion time)", tag,
 		html2text.HTML2Text(feed.Title),

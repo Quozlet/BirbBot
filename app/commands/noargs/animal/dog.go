@@ -1,7 +1,6 @@
 package animal
 
 import (
-	"log"
 	"net/url"
 
 	"quozlet.net/birbbot/app/commands"
@@ -13,10 +12,7 @@ type Dog struct{}
 // Check if the dog URL is valid
 func (d Dog) Check() error {
 	_, err := url.Parse(dogURL)
-	if err != nil {
-		log.Println(err)
-	}
-	return nil
+	return err
 }
 
 // ProcessMessage for a Dog Command (will return the URL for a random dog (specifically shibe) image)

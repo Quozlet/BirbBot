@@ -14,11 +14,14 @@ import (
 	"quozlet.net/birbbot/app/commands"
 )
 
-const filterTableDefinition string = "CREATE TABLE IF NOT EXISTS Filters (ID SERIAL PRIMARY KEY, Regex TEXT UNIQUE NOT NULL, FeedID INTEGER REFERENCES Feeds(ID))"
-const filterInsert string = "INSERT INTO Filters(Regex) VALUES ($1) ON CONFLICT (Regex) DO NOTHING"
-const filterApply string = "UPDATE Filters SET FeedID = $1 WHERE ID = $2"
-const filterList string = "SELECT ID, Regex FROM Filters"
-const filterSelect string = "SELECT Regex FROM Filters WHERE FeedID = $1"
+const filterTableDefinition = "CREATE TABLE IF NOT EXISTS Filters (ID SERIAL PRIMARY KEY, Regex TEXT UNIQUE NOT NULL, FeedID INTEGER REFERENCES Feeds(ID))"
+const filterInsert = "INSERT INTO Filters(Regex) VALUES ($1) ON CONFLICT (Regex) DO NOTHING"
+const filterApply = "UPDATE Filters SET FeedID = $1 WHERE ID = $2"
+const filterList = "SELECT ID, Regex FROM Filters"
+const filterSelect = "SELECT Regex FROM Filters WHERE FeedID = $1"
+
+const feedReadErrorMsg = "Error occurred reading the feeds, aborting"
+const invalidFeedIDErrorMsg = "%s is not a valid number to use as an ID"
 
 // Filter is a command to store a regular expression (regex) for filtering RSS feeds
 type Filter struct{}
@@ -60,19 +63,24 @@ func handlePossibleRegex(
 	exp string,
 	dbPool *pgxpool.Pool,
 ) *commands.CommandError {
+	var commandError *commands.CommandError
 	possibleRegexIndex := strings.IndexRune(exp, ' ')
 	if possibleRegexIndex < -1 {
 		return commands.NewError(fmt.Sprintf("Failed to parse '%s'", exp))
 	}
 	regex, err := regexp.Compile(strings.TrimLeftFunc(string([]rune(exp)[possibleRegexIndex:]), unicode.IsSpace))
-	if err != nil {
-		log.Println(err)
-		return commands.NewError(fmt.Sprintf("Failed to parse '%s'", string([]rune(exp)[possibleRegexIndex:])))
+	if commandError = commands.CreateCommandError(
+		fmt.Sprintf("Failed to parse '%s'", string([]rune(exp)[possibleRegexIndex:])),
+		err,
+	); commandError != nil {
+		return commandError
 	}
 	tag, err := dbPool.Exec(context.Background(), filterInsert, regex.String())
-	if err != nil {
-		log.Println(err)
-		return commands.NewError("Parsed as a valid regex, but failed to save. Try again!")
+	if commandError = commands.CreateCommandError(
+		"Parsed as a valid regex, but failed to save. Try again!",
+		err,
+	); commandError != nil {
+		return commandError
 	}
 	log.Printf("Filter: %s (actually inserted %s)", tag, regex)
 	response <- commands.MessageResponse{
@@ -87,24 +95,32 @@ func applyRegex(response chan<- commands.MessageResponse,
 	ids []string,
 	dbPool *pgxpool.Pool,
 ) *commands.CommandError {
+	var commandError *commands.CommandError
 	if len(ids) < 2 {
 		return commands.NewError("Need to associate a given filter to given feed.\n\n" +
 			"See `!help filter` for more info)")
 	}
 	regexID, err := strconv.ParseInt(ids[0], 0, 64)
-	if err != nil {
-		log.Println(err)
-		return commands.NewError(fmt.Sprintf("%s is not a valid number to use as an ID", ids[0]))
+	if commandError = commands.CreateCommandError(
+		fmt.Sprintf(invalidFeedIDErrorMsg, ids[0]),
+		err,
+	); commandError != nil {
+		return commandError
 	}
 	feedID, err := strconv.ParseInt(ids[1], 0, 64)
-	if err != nil {
-		log.Println(err)
-		return commands.NewError(fmt.Sprintf("%s is not a valid number to use as an ID", ids[1]))
+	if commandError = commands.CreateCommandError(
+		fmt.Sprintf(invalidFeedIDErrorMsg, ids[1]),
+		err,
+	); commandError != nil {
+		return commandError
 	}
 	tag, err := dbPool.Exec(context.Background(), filterApply, regexID, feedID)
-	if err != nil {
-		return commands.NewError(fmt.Sprintf("Failed to apply that filter. "+
-			"Check that %d is a valid filter ID, and %d a valid RSS ID", regexID, feedID))
+	if commandError = commands.CreateCommandError(
+		fmt.Sprintf("Failed to apply that filter. "+
+			"Check that %d is a valid filter ID, and %d a valid RSS ID", regexID, feedID),
+		err,
+	); commandError != nil {
+		return commandError
 	}
 	log.Printf("Filter: %s (actually inserted RegexID %d, FeedID %d)", tag, regexID, feedID)
 	response <- commands.MessageResponse{
@@ -119,18 +135,23 @@ func listRegex(
 	channelID string,
 	dbPool *pgxpool.Pool,
 ) *commands.CommandError {
+	var commandError *commands.CommandError
 	rows, err := dbPool.Query(context.Background(), filterList)
-	if err != nil {
-		log.Println(err)
-		return commands.NewError("Sorry, failed to lookup filters. Doesn't mean there aren't any though, so try again")
+	if commandError = commands.CreateCommandError(
+		"Sorry, failed to lookup filters. Doesn't mean there aren't any though, so try again",
+		err,
+	); commandError != nil {
+		return commandError
 	}
 	sentFilters := false
 	for rows.Next() {
 		var id int64
 		var regex string
-		if err := rows.Scan(&id, &regex); err != nil {
-			log.Println(err)
-			return commands.NewError("Error occurred reading the feeds, aborting")
+		if commandError = commands.CreateCommandError(
+			feedReadErrorMsg,
+			rows.Scan(&id, &regex),
+		); commandError != nil {
+			return commandError
 		}
 		sentFilters = true
 		response <- commands.MessageResponse{
@@ -138,9 +159,11 @@ func listRegex(
 			Message:   fmt.Sprintf("%d: %s", id, regex),
 		}
 	}
-	if err := rows.Err(); err != nil {
-		log.Println(err)
-		return commands.NewError("Error occurred reading the feeds, aborting")
+	if commandError = commands.CreateCommandError(
+		feedReadErrorMsg,
+		rows.Err(),
+	); commandError != nil {
+		return commandError
 	}
 	if !sentFilters {
 		response <- commands.MessageResponse{
