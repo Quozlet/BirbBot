@@ -294,14 +294,12 @@ func ReduceItem(items []*gofeed.Item, regex *regexp.Regexp) []RSSInfo {
 			Title: html2text.HTML2Text(item.Title),
 			Description: func() string {
 				if regex != nil {
-					log.Println(regex)
 					return extractDescriptionForRegex(regex, item)
 				}
 				return extractDescription(item)
 			}(),
 		}
 		if rssInfo.Description != "" {
-			log.Printf("%#v", rssInfo)
 			infoItems = append(infoItems, rssInfo)
 		}
 	}

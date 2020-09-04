@@ -164,16 +164,7 @@ func waitForAudio(session *discordgo.Session, audioChannel <-chan *audio.Data, m
 			}
 			audio.SetInVoice(true)
 		}
-		if (handler.SendErrorMsg(
-			commands.MessageResponse{
-				Message:   "An error occurred trying to speak, skipping",
-				ChannelID: currentAudio.currentData.TextChannelID,
-			},
-			messageChannel,
-			currentAudio.voiceConnection.Speaking(true),
-		)) {
-			continue
-		}
+		handler.LogError(currentAudio.voiceConnection.Speaking(true))
 		messageChannel <- commands.MessageResponse{
 			Message:   fmt.Sprintf("Playing \"%s\"", currentAudio.currentData.Title),
 			ChannelID: currentAudio.currentData.TextChannelID,
