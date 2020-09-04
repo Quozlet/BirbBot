@@ -5,11 +5,10 @@ import (
 	"quozlet.net/birbbot/app/commands"
 )
 
-// Disconnect will queue a disconnect command
 // Disconnect clears the queue and leaves the voice channel
 type Disconnect struct{}
 
-// ProcessMessage enqueues a Disconnect Command
+// ProcessMessage enqueues a Disconnect VoiceCommand
 func (d Disconnect) ProcessMessage(
 	response chan<- commands.MessageResponse,
 	voiceCommandChannel chan<- VoiceCommand,

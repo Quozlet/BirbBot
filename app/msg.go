@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"reflect"
+	"strings"
 	"sync"
 	"time"
 
@@ -130,30 +131,31 @@ func handleAudioCommandCommand(
 type currentAudioContainer struct {
 	voiceConnection  *discordgo.VoiceConnection
 	currentlyPlaying *dca.StreamingSession
+	currentData      *audio.Data
 }
 
 func waitForAudio(session *discordgo.Session, audioChannel <-chan *audio.Data, messageChannel chan<- commands.MessageResponse, voiceCommandChannel chan audio.VoiceCommand) {
 	queue := make([]*audio.Data, 0)
 	mutex := &sync.Mutex{}
 	currentAudio := currentAudioContainer{}
-	go controlCurrentStream(voiceCommandChannel, mutex, &currentAudio, &queue)
+	go controlCurrentStream(voiceCommandChannel, messageChannel, mutex, &currentAudio, &queue)
 	go queueNewAudio(&queue, mutex, audioChannel)
 	for {
 		var err error
-		var currentData *audio.Data
+		currentAudio.currentData = nil
 		mutex.Lock()
 		if len(queue) == 0 {
 			mutex.Unlock()
 			continue
 		}
-		currentData, queue = queue[0], queue[1:]
+		currentAudio.currentData = queue[0]
 		mutex.Unlock()
 		if currentAudio.voiceConnection == nil {
-			currentAudio.voiceConnection, err = session.ChannelVoiceJoin(currentData.GuildID, currentData.VoiceChannelID, false, true)
+			currentAudio.voiceConnection, err = session.ChannelVoiceJoin(currentAudio.currentData.GuildID, currentAudio.currentData.VoiceChannelID, false, true)
 			if (handler.SendErrorMsg(
 				commands.MessageResponse{
 					Message:   "An error occurred trying to join voice",
-					ChannelID: currentData.TextChannelID,
+					ChannelID: currentAudio.currentData.TextChannelID,
 				},
 				messageChannel,
 				err,
@@ -165,7 +167,7 @@ func waitForAudio(session *discordgo.Session, audioChannel <-chan *audio.Data, m
 		if (handler.SendErrorMsg(
 			commands.MessageResponse{
 				Message:   "An error occurred trying to speak, skipping",
-				ChannelID: currentData.TextChannelID,
+				ChannelID: currentAudio.currentData.TextChannelID,
 			},
 			messageChannel,
 			currentAudio.voiceConnection.Speaking(true),
@@ -173,16 +175,16 @@ func waitForAudio(session *discordgo.Session, audioChannel <-chan *audio.Data, m
 			continue
 		}
 		messageChannel <- commands.MessageResponse{
-			Message:   fmt.Sprintf("Playing \"%s\"", currentData.Title),
-			ChannelID: currentData.TextChannelID,
+			Message:   fmt.Sprintf("Playing \"%s\"", currentAudio.currentData.Title),
+			ChannelID: currentAudio.currentData.TextChannelID,
 		}
 		time.Sleep(250 * time.Millisecond)
 		done := make(chan error)
-		memData, fileData, err := currentData.AudioSource()
+		memData, fileData, err := currentAudio.currentData.AudioSource()
 		if (handler.SendErrorMsg(
 			commands.MessageResponse{
-				Message:   fmt.Sprintf("An error occurred trying to fetch %s", currentData.Title),
-				ChannelID: currentData.TextChannelID,
+				Message:   fmt.Sprintf("An error occurred trying to fetch %s", currentAudio.currentData.Title),
+				ChannelID: currentAudio.currentData.TextChannelID,
 			},
 			messageChannel,
 			err,
@@ -196,23 +198,23 @@ func waitForAudio(session *discordgo.Session, audioChannel <-chan *audio.Data, m
 		}
 		err = <-done
 		if err != io.EOF {
-			handler.SendErrorMsg(commands.MessageResponse{
-				Message:   fmt.Sprintf("An error occurred while playing %s", currentData.Title),
-				ChannelID: currentData.TextChannelID,
-			}, messageChannel, err)
+			handler.LogErrorMsg(fmt.Sprintf("An error occurred while playing %s (possibly disconnected before finished)", currentAudio.currentData.Title), err)
 		}
 		currentAudio.currentlyPlaying = nil
-		go handler.LogErrorMsg("Failed to cleanup: %s", currentData.Cleanup())
+		go handler.LogErrorMsg("Failed to cleanup: %s", currentAudio.currentData.Cleanup())
 		mutex.Lock()
+		if len(queue) != 0 {
+			queue = queue[1:]
+		}
 		if len(queue) == 0 {
 			if currentAudio.voiceConnection != nil {
 				handler.SendErrorMsg(commands.MessageResponse{
 					Message:   "Unable to stop speaking, probably was forcibly disconnected",
-					ChannelID: currentData.TextChannelID,
+					ChannelID: currentAudio.currentData.TextChannelID,
 				}, messageChannel, currentAudio.voiceConnection.Speaking(false))
 				handler.SendErrorMsg(commands.MessageResponse{
 					Message:   "Nothing more in the queue, but I can't leave",
-					ChannelID: currentData.TextChannelID,
+					ChannelID: currentAudio.currentData.TextChannelID,
 				}, messageChannel, currentAudio.voiceConnection.Disconnect())
 				audio.SetInVoice(false)
 				currentAudio.voiceConnection = nil
@@ -227,7 +229,7 @@ func queueNewAudio(queue *[]*audio.Data, mutex *sync.Mutex, audioChannel <-chan 
 	for audioData := range audioChannel {
 		mutex.Lock()
 		if len(*queue) != 0 {
-			// Don't waste time caching if this is the only thing to be played next
+			// Don't waste time caching if this is the only thing to be played
 			go audioData.CacheAsFile()
 		}
 		*queue = append(*queue, audioData)
@@ -237,6 +239,7 @@ func queueNewAudio(queue *[]*audio.Data, mutex *sync.Mutex, audioChannel <-chan 
 
 func controlCurrentStream(
 	voiceCommandChannel chan audio.VoiceCommand,
+	messageChannel chan<- commands.MessageResponse,
 	mutex *sync.Mutex,
 	currentAudio *currentAudioContainer,
 	queue *[]*audio.Data,
@@ -258,6 +261,19 @@ func controlCurrentStream(
 				(*currentAudio).currentlyPlaying.SetPaused(false)
 			case audio.Stop:
 				(*currentAudio).currentlyPlaying.SetPaused(true)
+			case audio.List:
+				mutex.Lock()
+				var builder strings.Builder
+				builder.WriteString(fmt.Sprintf("```\nCurrently playing: %s (currently at %s)", (*currentAudio).currentData.Title, (*currentAudio).currentlyPlaying.PlaybackPosition()))
+				for i, data := range *queue {
+					builder.WriteString(fmt.Sprintf("\n%d: %s", i+1, data.Title))
+				}
+				builder.WriteString("\n```")
+				messageChannel <- commands.MessageResponse{
+					Message:   builder.String(),
+					ChannelID: (*currentAudio).currentData.TextChannelID,
+				}
+				mutex.Unlock()
 			}
 		}
 	}

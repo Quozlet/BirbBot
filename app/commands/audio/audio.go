@@ -1,6 +1,7 @@
 package audio
 
 import (
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -29,22 +30,22 @@ type audioSource struct {
 // CacheAsFile takes the current encoding session and copies it to a file
 // This is to reduce "unnecessary" memory consumption, and should be done eagerly
 func (d Data) CacheAsFile() {
+	d.mutex.Lock()
 	tmpFile, err := ioutil.TempFile("", "*.dca")
 	if err != nil {
 		log.Printf("Failed to cache stream as file: %s", err)
 		return
 	}
-	defer handler.LogErrorMsg("Failed to close temp file: %s", tmpFile.Close())
-	d.mutex.Lock()
 	_, err = io.Copy(tmpFile, d.audio.session)
 	if err != nil {
-		handler.LogErrorMsg("Failed to copy, aborting cache: %s", err)
-		handler.LogErrorMsg("Failed to remove temp file: %s", os.Remove(d.audio.filename))
+		handler.LogErrorMsg("Failed to copy, aborting cache", err)
+		handler.LogErrorMsg(fmt.Sprintf("Failed to remove temp file: %s", tmpFile.Name()), os.Remove(d.audio.filename))
 		d.mutex.Unlock()
 		return
 	}
 	d.audio.session = nil
 	d.audio.filename = tmpFile.Name()
+	handler.LogErrorMsg("Failed to close temp file: %s", tmpFile.Close())
 	d.mutex.Unlock()
 	log.Printf("Cached %s as a file", d.Title)
 }
@@ -58,6 +59,10 @@ func (d Data) AudioSource() (*dca.EncodeSession, *dca.Decoder, error) {
 		file, err := os.Open(d.audio.filename)
 		if err != nil {
 			return nil, nil, err
+		}
+		decoder := dca.NewDecoder(file)
+		if decoder.Metadata != nil {
+			d.Title = decoder.Metadata.SongInfo.Title
 		}
 		return nil, dca.NewDecoder(file), nil
 	}
@@ -86,6 +91,8 @@ const (
 	Start
 	// Stop will stop if the stream is playing
 	Stop
+	// List lists the current queue
+	List
 )
 
 var inVoice = false

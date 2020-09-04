@@ -51,15 +51,20 @@ func (p Play) ProcessMessage(
 		if commandError = commands.CreateCommandError("Failed to re-encode audio stream", err); commandError != nil {
 			return nil, commandError
 		}
-		title := strings.Title(
-			strings.Join(
-				strings.FieldsFunc(
-					url.Path[strings.LastIndex(url.Path, "/")+1:],
-					func(r rune) bool { return r == '-' },
+		var title string
+		if len(splitContent[2:]) != 0 {
+			title = strings.Join(splitContent[2:], " ")
+		} else {
+			title = strings.Title(
+				strings.Join(
+					strings.FieldsFunc(
+						url.Path[strings.LastIndex(url.Path, "/")+1:],
+						func(r rune) bool { return r == '-' },
+					),
+					" ",
 				),
-				" ",
-			),
-		)
+			)
+		}
 		response <- commands.MessageResponse{
 			ChannelID: m.ChannelID,
 			Message:   fmt.Sprintf("Queued \"%s\"", title),
@@ -84,5 +89,6 @@ func (p Play) CommandList() []string {
 // Help returns the help string for the Play Command
 func (p Play) Help() string {
 	return "`p`/`play` plays audio if it is paused\n" +
-		"- `p`/`play` <audio URL> will enqueue that URL to be played"
+		"- `p`/`play` <audio URL> will enqueue that URL to be played\n" +
+		"- `p`/`play` <audio URL> <title> will enqueue that URL with a title"
 }

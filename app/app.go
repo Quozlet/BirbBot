@@ -118,6 +118,7 @@ func discoverCommand(dbPool *pgxpool.Pool) (map[string]*Command, []string) {
 		audio.Disconnect{},
 		audio.Play{},
 		audio.Pause{},
+		audio.Queue{},
 		noargs.Fortune{},
 		noargs.FortuneCookie{},
 		noargs.License{},
