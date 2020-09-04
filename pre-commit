@@ -19,12 +19,12 @@ if command -v errcheck >/dev/null; then
 	echo "Found errcheck, checking for ignored errors..."
 	errcheck ./...
 else
-	echo "Warning, couldn't find errcheck, skipping" >&2
+	echo "Warning, couldn't find errcheck, not running" >&2
 fi
 if command -v staticcheck >/dev/null; then
-	echo "Found staticcheck, analyzing..."
+	echo "Found staticheck, performing static analysis..."
 	staticcheck ./...
 else
-	echo "Warning, couldn't find staticcheck, skipping" >&2
+	echo "Warning, coudln't find staticcheck, not running" >&2
 fi
 echo "Finished linting, no issues!"

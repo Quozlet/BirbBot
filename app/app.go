@@ -12,6 +12,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"quozlet.net/birbbot/app/commands"
+	"quozlet.net/birbbot/app/commands/audio"
 	"quozlet.net/birbbot/app/commands/noargs"
 	"quozlet.net/birbbot/app/commands/noargs/animal"
 	"quozlet.net/birbbot/app/commands/persistent"
@@ -36,13 +37,16 @@ func Start(secret string, dbPool *pgxpool.Pool, ticker *Timers) (*discordgo.Sess
 	log.Println("Bot Token accepted by Discord, beginning connection...")
 	messageChannel := make(chan commands.MessageResponse)
 	go waitForCommandResponses(session, messageChannel)
+	audioChannel := make(chan *audio.Data)
+	voiceCommandChannel := make(chan audio.VoiceCommand)
+	go waitForAudio(session, audioChannel, messageChannel, voiceCommandChannel)
 	// TODO: If panicking while processing a command, error instead of crashing
 	session.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
 		// Ignore messages without the '!' prefix or with own ID
 		if m.Author.ID == s.State.User.ID || !strings.HasPrefix(m.Content, string(Prefix)) {
 			return
 		}
-		commandHandler(s, m, dbPool, commandMap, commandList, messageChannel)
+		commandHandler(s, m, dbPool, commandMap, commandList, messageChannel, audioChannel, voiceCommandChannel)
 	})
 	go ticker.Start(recurringCommands, dbPool, session)
 	if err = session.Open(); err != nil {
@@ -60,6 +64,8 @@ func commandHandler(
 	commandMap map[string]*Command,
 	commandList []string,
 	msgChannel chan commands.MessageResponse,
+	audioChannel chan *audio.Data,
+	voiceCommandChannel chan audio.VoiceCommand,
 ) {
 	content := strings.Fields(strings.ToLower(m.Content))
 	cmd, found := commandMap[content[0]]
@@ -94,8 +100,10 @@ func commandHandler(
 		session: s,
 		message: m,
 	}, msgInfo{
-		handler: cmd,
-		channel: msgChannel,
+		handler:             cmd,
+		msgChannel:          msgChannel,
+		audioChannel:        audioChannel,
+		voiceCommandChannel: voiceCommandChannel,
 	}, dbPool)
 }
 
@@ -107,6 +115,9 @@ func discoverCommand(dbPool *pgxpool.Pool) (map[string]*Command, []string) {
 		animal.Bird{},
 		animal.Cat{},
 		animal.Dog{},
+		audio.Disconnect{},
+		audio.Play{},
+		audio.Pause{},
 		noargs.Fortune{},
 		noargs.FortuneCookie{},
 		noargs.License{},
@@ -152,6 +163,7 @@ func isValidCommand(command *Command, dbPool *pgxpool.Pool) bool {
 	simpleCmd, isSimple := (*command).(SimpleCommand)
 	noArgsCmd, hasNoArgs := (*command).(NoArgsCommand)
 	persistentCmd, isPersistent := (*command).(PersistentCommand)
+	_, isAudio := (*command).(AudioCommand)
 	commandName := reflect.TypeOf(*command).Name()
 	if isSimple {
 		if err := simpleCmd.Check(); err != nil {
@@ -168,9 +180,10 @@ func isValidCommand(command *Command, dbPool *pgxpool.Pool) bool {
 			log.Printf("%s recognized but not registered: %s", commandName, err)
 			return false
 		}
+	} else if isAudio {
+		return true
 	} else {
-		log.Printf("%s was recognized as a command, but does not implement a required interface."+
-			" It is therefore ignored", reflect.TypeOf(*command).Name())
+		log.Fatalf("%s was recognized as a command, but does not implement a required interface.", reflect.TypeOf(*command).Name())
 		return false
 	}
 	return true

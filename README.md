@@ -38,7 +38,7 @@ A Discord Bot token should be created to use the bot.
 <!-- TODO: Create a mock environment to test the bot -->
 Go to the [Discord Developer Portal](https://discordapp.com/developers/applications/), click "New Application", then go the "Bot" and click "Add Bot". The bot's token should be put into a file named `.env` in the format of [`.env.example`](.env.example). DO NOT have this token anywhere in the project when pushing to GitHub (.env is automatically [ignored](https://git-scm.com/docs/gitignore), see the [.gitignore](.gitignore)). If you accidentally include it somewhere, remove it and immediately regenerate a new one.
 
-To test this bot with your server, copy the client ID for your application, and go to `https://discord.com/oauth2/authorize?client_id=<your client id>&scope=bot`.
+To test this bot with your server, copy the client ID for your application, and go to `https://discord.com/oauth2/authorize?client_id=<your client id>&scope=bot&permissions=292678210`.
 
 ### Running
 

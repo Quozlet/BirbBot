@@ -6,6 +6,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"quozlet.net/birbbot/app/commands"
+	"quozlet.net/birbbot/app/commands/audio"
 	"quozlet.net/birbbot/app/commands/recurring"
 )
 
@@ -34,6 +35,11 @@ type PersistentCommand interface {
 	Check(*pgxpool.Pool) error
 	// ProcessMessage processes all additional arguments to the command (split on whitespace)
 	ProcessMessage(chan<- commands.MessageResponse, *discordgo.MessageCreate, *pgxpool.Pool) *commands.CommandError
+}
+
+// AudioCommand is a command that will return an Opus stream for a channel
+type AudioCommand interface {
+	ProcessMessage(response chan<- commands.MessageResponse, voiceCommandChannel chan<- audio.VoiceCommand, m *discordgo.MessageCreate) (*audio.Data, *commands.CommandError)
 }
 
 // NoArgsCommand will always go through the same flow to response, irrespective of arguments

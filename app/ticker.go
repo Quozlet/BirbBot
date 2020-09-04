@@ -25,6 +25,7 @@ type Timers struct {
 
 // Start looking for new messages to post at all the supported intervals
 func (t Timers) Start(recurringCommandMap map[recurring.Frequency][]*RecurringCommand, dbPool *pgxpool.Pool, session *discordgo.Session) {
+	log.Println("All timers successfully started, monitoring...")
 	for {
 		select {
 		case <-t.Daily.C:

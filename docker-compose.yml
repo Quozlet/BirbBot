@@ -8,7 +8,7 @@ services:
       - postgres
     restart: unless-stopped
   postgres:
-    image: 'postgres:13-alpine'
+    image: 'postgres:12.4-alpine'
     env_file:
       - db.env
     volumes:
