@@ -128,6 +128,8 @@ func handleAudioCommandCommand(
 	return commands.NewError("You must be in a voice channel to play audio")
 }
 
+const audioActionReattempts = 20
+
 type currentAudioContainer struct {
 	voiceConnection  *discordgo.VoiceConnection
 	currentlyPlaying *dca.StreamingSession
@@ -151,7 +153,7 @@ func waitForAudio(session *discordgo.Session, audioChannel <-chan *audio.Data, m
 		currentAudio.currentData = queue[0]
 		mutex.Unlock()
 		if currentAudio.voiceConnection == nil {
-			currentAudio.voiceConnection, err = session.ChannelVoiceJoin(currentAudio.currentData.GuildID, currentAudio.currentData.VoiceChannelID, false, true)
+			currentAudio.voiceConnection, err = joinVoice(session, currentAudio.currentData.GuildID, currentAudio.currentData.VoiceChannelID)
 			if (handler.SendErrorMsg(
 				commands.MessageResponse{
 					Message:   "An error occurred trying to join voice",
@@ -164,7 +166,14 @@ func waitForAudio(session *discordgo.Session, audioChannel <-chan *audio.Data, m
 			}
 			audio.SetInVoice(true)
 		}
-		handler.LogError(currentAudio.voiceConnection.Speaking(true))
+		handler.SendErrorMsg(
+			commands.MessageResponse{
+				Message:   "An error occurred when trying to speak",
+				ChannelID: currentAudio.currentData.TextChannelID,
+			},
+			messageChannel,
+			setSpeaking(currentAudio.voiceConnection, true),
+		)
 		messageChannel <- commands.MessageResponse{
 			Message:   fmt.Sprintf("Playing \"%s\"", currentAudio.currentData.Title),
 			ChannelID: currentAudio.currentData.TextChannelID,
@@ -189,7 +198,18 @@ func waitForAudio(session *discordgo.Session, audioChannel <-chan *audio.Data, m
 		}
 		err = <-done
 		if err != io.EOF {
-			handler.LogErrorMsg(fmt.Sprintf("An error occurred while playing %s (possibly disconnected before finished)", currentAudio.currentData.Title), err)
+			handler.LogErrorMsg(fmt.Sprintf("An error occurred while playing %s (possibly disconnected before finished). Reconnecting...", currentAudio.currentData.Title), err)
+			mutex.Lock()
+			if len(queue) != 0 {
+				queue = queue[1:]
+			}
+			if err := leaveVoice(currentAudio.voiceConnection); err != nil {
+				log.Println(err)
+			}
+			currentAudio.voiceConnection = nil
+			audio.SetInVoice(false)
+			mutex.Unlock()
+
 		}
 		currentAudio.currentlyPlaying = nil
 		go handler.LogErrorMsg("Failed to cleanup: %s", currentAudio.currentData.Cleanup())
@@ -202,13 +222,13 @@ func waitForAudio(session *discordgo.Session, audioChannel <-chan *audio.Data, m
 				handler.SendErrorMsg(commands.MessageResponse{
 					Message:   "Unable to stop speaking, probably was forcibly disconnected",
 					ChannelID: currentAudio.currentData.TextChannelID,
-				}, messageChannel, currentAudio.voiceConnection.Speaking(false))
+				}, messageChannel, setSpeaking(currentAudio.voiceConnection, false))
 				handler.SendErrorMsg(commands.MessageResponse{
 					Message:   "Nothing more in the queue, but I can't leave",
 					ChannelID: currentAudio.currentData.TextChannelID,
-				}, messageChannel, currentAudio.voiceConnection.Disconnect())
-				audio.SetInVoice(false)
+				}, messageChannel, leaveVoice(currentAudio.voiceConnection))
 				currentAudio.voiceConnection = nil
+				audio.SetInVoice(false)
 			}
 		}
 		mutex.Unlock()
@@ -241,9 +261,9 @@ func controlCurrentStream(
 			case audio.Leave:
 				mutex.Lock()
 				if (*currentAudio).voiceConnection != nil {
-					handler.LogError((*currentAudio).voiceConnection.Disconnect())
-					audio.SetInVoice(false)
+					handler.LogError(leaveVoice((*currentAudio).voiceConnection))
 					(*currentAudio).voiceConnection = nil
+					audio.SetInVoice(false)
 				}
 				*queue = nil
 				*queue = make([]*audio.Data, 0)
@@ -268,4 +288,44 @@ func controlCurrentStream(
 			}
 		}
 	}
+}
+
+func joinVoice(session *discordgo.Session, guildID string, voiceChannelID string) (*discordgo.VoiceConnection, error) {
+	var vc *discordgo.VoiceConnection
+	var err error
+	for i := 0; i < audioActionReattempts; i++ {
+		vc, err = session.ChannelVoiceJoin(guildID, voiceChannelID, false, true)
+		if err != nil {
+			log.Printf("Trying to join voice, attempt %d of %d: %s", i, audioActionReattempts, err)
+			continue
+		}
+		audio.SetInVoice(true)
+		return vc, nil
+	}
+	return nil, err
+}
+
+func leaveVoice(vc *discordgo.VoiceConnection) error {
+	var err error
+	for i := 0; i < audioActionReattempts; i++ {
+		if err = vc.Disconnect(); err != nil {
+			log.Printf("Trying to leave voice, attempt %d of %d: %s", i, audioActionReattempts, err)
+			continue
+		}
+		audio.SetInVoice(false)
+		break
+	}
+	return err
+}
+
+func setSpeaking(vc *discordgo.VoiceConnection, speaking bool) error {
+	var err error
+	for i := 0; i < audioActionReattempts; i++ {
+		if err = vc.Speaking(speaking); err != nil {
+			log.Printf("Set speaking to %t, attempt %d of %d: %s", speaking, i, audioActionReattempts, err)
+			continue
+		}
+		break
+	}
+	return err
 }
