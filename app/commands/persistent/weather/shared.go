@@ -8,10 +8,14 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
-const weatherTableDefinition string = "CREATE TABLE IF NOT EXISTS Weather (DiscordUserID TEXT PRIMARY KEY, Location TEXT NOT NULL)"
-const weatherNewDefault string = "INSERT INTO Weather (DiscordUserID, Location) VALUES ($1, $2) ON CONFLICT(DiscordUserID) DO UPDATE SET Location=excluded.Location"
-const weatherSelect string = "SELECT Location FROM Weather WHERE DiscordUserID = $1"
-const weatherDrop string = "DELETE FROM WEATHER WHERE DiscordUserID = $1"
+const (
+	weatherTableDefinition string = "CREATE TABLE IF NOT EXISTS Weather (DiscordUserID TEXT PRIMARY KEY, " +
+		"Location TEXT NOT NULL)"
+	weatherNewDefault string = "INSERT INTO Weather (DiscordUserID, Location) VALUES ($1, $2) " +
+		"ON CONFLICT(DiscordUserID) DO UPDATE SET Location=excluded.Location"
+	weatherSelect string = "SELECT Location FROM Weather WHERE DiscordUserID = $1"
+	weatherDrop   string = "DELETE FROM WEATHER WHERE DiscordUserID = $1"
+)
 
 type weatherReport struct {
 	CurrentCondition []currentCondition `json:"current_condition"`
@@ -59,14 +63,16 @@ const weatherURL = "https://wttr.in"
 const weatherWidth = 10
 
 func canFetchWeather(dbPool *pgxpool.Pool) error {
-	_, err := url.Parse(weatherURL)
-	if err != nil {
+	if _, err := url.Parse(weatherURL); err != nil {
 		return err
 	}
+
 	tag, err := dbPool.Exec(context.Background(), weatherTableDefinition)
 	if err != nil {
 		return err
 	}
+
 	log.Printf("Weather/Forecast: %s", tag)
+
 	return nil
 }

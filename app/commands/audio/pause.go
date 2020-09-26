@@ -5,10 +5,10 @@ import (
 	"quozlet.net/birbbot/app/commands"
 )
 
-// Pause pauses the currently playing stream
+// Pause pauses the currently playing stream.
 type Pause struct{}
 
-// ProcessMessage will pause the stream (if it isn't already)
+// ProcessMessage will pause the stream (if it isn't already).
 func (p Pause) ProcessMessage(
 	response chan<- commands.MessageResponse,
 	voiceCommandChannel chan<- VoiceCommand,
@@ -25,15 +25,16 @@ func (p Pause) ProcessMessage(
 		},
 	}
 	voiceCommandChannel <- Stop
+
 	return nil, nil
 }
 
-// CommandList returns the list of aliases for the Pause Command
+// CommandList returns the list of aliases for the Pause Command.
 func (p Pause) CommandList() []string {
 	return []string{"pause", "stop"}
 }
 
-// Help returns the help string for the Pause Command
+// Help returns the help string for the Pause Command.
 func (p Pause) Help() string {
 	return "`pause`/`stop` pauses the currently playing audio"
 }

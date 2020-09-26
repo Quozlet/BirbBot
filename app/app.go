@@ -21,24 +21,35 @@ import (
 	"quozlet.net/birbbot/app/commands/simple"
 )
 
-var recurringCommands = map[recurring.Frequency][]*RecurringCommand{}
+var (
+	recurringCommands  = map[recurring.Frequency][]*RecurringCommand{}
+	errIncorrectSecret = errors.New("not attempting connection, secret seems incorrect")
+)
 
-// Start a Discord session for a given token
+// Start a Discord session for a given token.
 func Start(secret string, dbPool *pgxpool.Pool, ticker *Timers) (*discordgo.Session, error) {
 	if len(secret) == 0 {
-		return nil, errors.New("not attempting connection, secret seems incorrect")
+		return nil, errIncorrectSecret
 	}
+
 	commandMap, commandList := discoverCommand(dbPool)
+
 	session, err := discordgo.New("Bot " + secret)
 	if err != nil {
 		log.Println("Unable to create Discord session")
+
 		return nil, err
 	}
+
 	log.Println("Bot Token accepted by Discord, beginning connection...")
+
 	messageChannel := make(chan commands.MessageResponse)
+
 	go waitForCommandResponses(session, messageChannel)
+
 	audioChannel := make(chan *audio.Data)
 	voiceCommandChannel := make(chan audio.VoiceCommand)
+
 	go waitForAudio(session, audioChannel, messageChannel, voiceCommandChannel)
 	// TODO: If panicking while processing a command, error instead of crashing
 	session.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
@@ -48,12 +59,17 @@ func Start(secret string, dbPool *pgxpool.Pool, ticker *Timers) (*discordgo.Sess
 		}
 		commandHandler(s, m, dbPool, commandMap, commandList, messageChannel, audioChannel, voiceCommandChannel)
 	})
+
 	go ticker.Start(recurringCommands, dbPool, session)
+
 	if err = session.Open(); err != nil {
 		log.Println("Failed to open WebSocket connection to Discord servers")
+
 		return nil, err
 	}
+
 	log.Println("Opened WebSocket connection to Discord...")
+
 	return session, nil
 }
 
@@ -69,24 +85,12 @@ func commandHandler(
 ) {
 	content := strings.Fields(strings.ToLower(m.Content))
 	cmd, found := commandMap[content[0]]
+
 	log.Printf("Ack %s: %s", m.Author.Username, m.Content)
+
 	if !found {
 		if content[0] == BuildCommandName("help") {
-			helpMsg := fmt.Sprintf("Available commands (All require prefix `%s`):\n`%s`,"+
-				"(For more information on a specific command: `help <command name>`)", string(Prefix), strings.Join(commandList, "`, `"))
-			if len(content[1:]) != 0 {
-				cmd, ok := commandMap[BuildCommandName(content[1])]
-				if !ok {
-					helpMsg = fmt.Sprintf("Cannot find help message, command `%s` does not exist", BuildCommandName(content[1]))
-				} else {
-					helpMsg = (*cmd).Help()
-				}
-			}
-			msgChannel <- commands.MessageResponse{
-				ChannelID: m.ChannelID,
-				Message:   helpMsg,
-			}
-
+			msgChannel <- handleHelpMessage(m.ChannelID, commandList, content[1:], commandMap)
 		} else {
 			log.Printf("Unrecognized command: %s", m.Content)
 			msgChannel <- commands.MessageResponse{
@@ -94,8 +98,10 @@ func commandHandler(
 				Message:   fmt.Sprintf("Unrecognized command: `%s`", content[0]),
 			}
 		}
+
 		return
 	}
+
 	go processCommand(discordInfo{
 		session: s,
 		message: m,
@@ -108,9 +114,10 @@ func commandHandler(
 }
 
 // TODO: Automatically populate commands (requires some AST parser black magic)
-// In the meantime newly added commands must implement all methods in the Command interface and be added to the list
+// In the meantime newly added commands must implement all methods in the Command interface and be added to the list.
 func discoverCommand(dbPool *pgxpool.Pool) (map[string]*Command, []string) {
 	commandMap := make(map[string]*Command)
+
 	for _, cmd := range []interface{}{
 		animal.Bird{},
 		animal.Cat{},
@@ -151,12 +158,16 @@ func discoverCommand(dbPool *pgxpool.Pool) (map[string]*Command, []string) {
 			}
 		}
 	}
+
 	keys, i := make([]string, len(commandMap)), 0
+
 	for key := range commandMap {
 		keys[i] = key
 		i++
 	}
+
 	log.Printf("Registered commands: %s", strings.Join(keys, ", "))
+
 	return commandMap, keys
 }
 
@@ -166,28 +177,64 @@ func isValidCommand(command *Command, dbPool *pgxpool.Pool) bool {
 	persistentCmd, isPersistent := (*command).(PersistentCommand)
 	_, isAudio := (*command).(AudioCommand)
 	commandName := reflect.TypeOf(*command).Name()
-	if isSimple {
+
+	switch {
+	case isSimple:
 		if err := simpleCmd.Check(); err != nil {
 			log.Printf("%s recognized but not registered: %s", commandName, err)
+
 			return false
 		}
-	} else if hasNoArgs {
+	case hasNoArgs:
 		if err := noArgsCmd.Check(); err != nil {
 			log.Printf("%s recognized but not registered: %s", commandName, err)
+
 			return false
 		}
-	} else if isPersistent {
+	case isPersistent:
 		if err := persistentCmd.Check(dbPool); err != nil {
 			log.Printf("%s recognized but not registered: %s", commandName, err)
+
 			return false
 		}
-	} else if isAudio {
+	case isAudio:
 		return true
-	} else {
-		log.Fatalf("%s was recognized as a command, but does not implement a required interface.", reflect.TypeOf(*command).Name())
+	default:
+		log.Fatalf("%s was recognized as a command, but does not implement a required interface.",
+			reflect.TypeOf(*command).Name(),
+		)
+
 		return false
 	}
+
 	return true
+}
+
+func handleHelpMessage(
+	channelID string,
+	commandList []string,
+	args []string,
+	commandMap map[string]*Command,
+) commands.MessageResponse {
+	helpMsg := fmt.Sprintf("Available commands (All require prefix `%s`):\n`%s`,"+
+		"(For more information on a specific command: `help <command name>`)",
+		string(Prefix),
+		strings.Join(commandList, "`, `"),
+	)
+
+	if len(args) != 0 {
+		cmd, ok := commandMap[BuildCommandName(args[1])]
+		if !ok {
+			helpMsg = fmt.Sprintf("Cannot find help message, command `%s` does not exist", BuildCommandName(args[1]))
+		} else {
+			helpMsg = (*cmd).Help()
+		}
+	}
+
+	return commands.MessageResponse{
+		ChannelID: channelID,
+		Message:   helpMsg,
+	}
 }
 
 func waitForCommandResponses(session *discordgo.Session, messageChannel <-chan commands.MessageResponse) {
@@ -203,6 +250,7 @@ func waitForCommandResponses(session *discordgo.Session, messageChannel <-chan c
 					),
 				)
 			}
+
 			if len(pendingMsg.Reaction.Remove) != 0 {
 				handler.LogErrorMsg(
 					fmt.Sprintf("Failed to remove reaction %s", pendingMsg.Reaction.Remove),
@@ -215,6 +263,7 @@ func waitForCommandResponses(session *discordgo.Session, messageChannel <-chan c
 				)
 			}
 		}
+
 		if len(pendingMsg.Message) != 0 {
 			_, err := session.ChannelMessageSend(pendingMsg.ChannelID, pendingMsg.Message)
 			handler.LogError(err)

@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
-// Timers at which RecurringCommand intervals are supported
+// Timers at which RecurringCommand intervals are supported.
 type Timers struct {
 	Daily           *time.Ticker
 	Hourly          *time.Ticker
@@ -23,9 +23,14 @@ type Timers struct {
 	QuarterToHourly *time.Ticker
 }
 
-// Start looking for new messages to post at all the supported intervals
-func (t Timers) Start(recurringCommandMap map[recurring.Frequency][]*RecurringCommand, dbPool *pgxpool.Pool, session *discordgo.Session) {
+// Start looking for new messages to post at all the supported intervals.
+func (t Timers) Start(
+	recurringCommandMap map[recurring.Frequency][]*RecurringCommand,
+	dbPool *pgxpool.Pool,
+	session *discordgo.Session,
+) {
 	log.Println("All timers successfully started, monitoring...")
+
 	for {
 		select {
 		case <-t.Daily.C:
@@ -72,7 +77,7 @@ func (t Timers) Start(recurringCommandMap map[recurring.Frequency][]*RecurringCo
 	}
 }
 
-// StopAll timers so no more events are sent on their channels
+// StopAll timers so no more events are sent on their channels.
 func (t Timers) StopAll() {
 	t.Daily.Stop()
 	t.Hourly.Stop()
@@ -85,6 +90,7 @@ func processRecurringMsg(cmds []*RecurringCommand, dbPool *pgxpool.Pool, session
 		pendingMsgs := (*cmd).Check(dbPool)
 		for channel, msgs := range pendingMsgs {
 			log.Printf("%s -> %#v", channel, msgs)
+
 			for _, msg := range msgs {
 				_, err := session.ChannelMessageSend(channel, msg)
 				handler.LogError(err)

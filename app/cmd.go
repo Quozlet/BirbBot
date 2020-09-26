@@ -10,10 +10,10 @@ import (
 	"quozlet.net/birbbot/app/commands/recurring"
 )
 
-// Prefix that all commands must begin with to be recognized
+// Prefix that all commands must begin with to be recognized.
 const Prefix = '!'
 
-// Command is an interface that must be implemented for commands
+// Command is an interface that must be implemented for commands.
 type Command interface {
 	// CommandList returns all aliases for the given command (must return at least one)
 	CommandList() []string
@@ -21,7 +21,7 @@ type Command interface {
 	Help() string
 }
 
-// SimpleCommand is a command that responds to a message with no other context
+// SimpleCommand is a command that responds to a message with no other context.
 type SimpleCommand interface {
 	// Check asserts all preconditions are met, and returns an error if they are not
 	Check() error
@@ -29,7 +29,7 @@ type SimpleCommand interface {
 	ProcessMessage(chan<- commands.MessageResponse, *discordgo.MessageCreate) *commands.CommandError
 }
 
-// PersistentCommand is a command that will persist some data into a database
+// PersistentCommand is a command that will persist some data into a database.
 type PersistentCommand interface {
 	// Check asserts all preconditions are met, and returns an error if they are not
 	Check(*pgxpool.Pool) error
@@ -37,12 +37,15 @@ type PersistentCommand interface {
 	ProcessMessage(chan<- commands.MessageResponse, *discordgo.MessageCreate, *pgxpool.Pool) *commands.CommandError
 }
 
-// AudioCommand is a command that will return an Opus stream for a channel
+// AudioCommand is a command that will return an Opus stream for a channel.
 type AudioCommand interface {
-	ProcessMessage(response chan<- commands.MessageResponse, voiceCommandChannel chan<- audio.VoiceCommand, m *discordgo.MessageCreate) (*audio.Data, *commands.CommandError)
+	ProcessMessage(response chan<- commands.MessageResponse,
+		voiceCommandChannel chan<- audio.VoiceCommand,
+		m *discordgo.MessageCreate,
+	) (*audio.Data, *commands.CommandError)
 }
 
-// NoArgsCommand will always go through the same flow to response, irrespective of arguments
+// NoArgsCommand will always go through the same flow to response, irrespective of arguments.
 type NoArgsCommand interface {
 	// Check asserts all preconditions are met, and returns an error if they are not
 	Check() error
@@ -51,7 +54,7 @@ type NoArgsCommand interface {
 }
 
 // RecurringCommand will be run on a recurring basis, and return a map of channels to messages to post
-// Note: It is not explicitly invoked, and some other command should handle populating data for it
+// Note: It is not explicitly invoked, and some other command should handle populating data for it.
 type RecurringCommand interface {
 	// Check will check if there is any update. If an error occurs or there is no update, return nil
 	Check(*pgxpool.Pool) map[string][]string
@@ -59,10 +62,12 @@ type RecurringCommand interface {
 	Frequency() recurring.Frequency
 }
 
-// BuildCommandName is a helper function to efficiently concatenate the current prefix with a command name
+// BuildCommandName is a helper function to efficiently concatenate the current prefix with a command name.
 func BuildCommandName(alias string) string {
 	var builder strings.Builder
+
 	builder.WriteRune(Prefix)
 	builder.WriteString(alias)
+
 	return builder.String()
 }

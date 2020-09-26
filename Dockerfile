@@ -1,17 +1,9 @@
-FROM returntocorp/semgrep:f76e1a701bcdbb4a24a707e05fa0be83bf2000a7
-WORKDIR /lint
-COPY . .
-RUN semgrep -f /lint/semgrep/go.yml /lint/
-
-FROM golang:1.15.0-alpine3.12 AS build
+FROM golang:1.15.2-alpine3.12 AS build
 WORKDIR /build
 # Caches all the dependency downloads
 COPY ["go.mod", "go.sum", "./"]
-RUN apk add --no-cache --update git ffmpeg \
-    && go get github.com/securego/gosec/cmd/gosec \
-    && go get -u golang.org/x/lint/golint \
-    && go get -u github.com/kisielk/errcheck \
-    && go get honnef.co/go/tools/cmd/staticcheck \
+RUN apk add --no-cache --update git ffmpeg gcc libc-dev \
+    && go get github.com/golangci/golangci-lint/cmd/golangci-lint@v1.31.0 \
     && go mod download
 COPY . .
 # Cache linting binaries

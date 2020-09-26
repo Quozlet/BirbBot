@@ -30,15 +30,15 @@ var eightBallMessages = []string{
 	"Very doubtful",
 }
 
-// EightBall is a Command to provide an answer to a yes/no question
+// EightBall is a Command to provide an answer to a yes/no question.
 type EightBall struct{}
 
-// Check always returns nil (all messages are guaranteed to be allocated)
+// Check always returns nil (all messages are guaranteed to be allocated).
 func (e EightBall) Check() error {
 	return nil
 }
 
-// ProcessMessage will return an error if no arguments are provided, otherwise a random message is chosen
+// ProcessMessage will return an error if no arguments are provided, otherwise a random message is chosen.
 func (e EightBall) ProcessMessage(
 	response chan<- commands.MessageResponse,
 	m *discordgo.MessageCreate,
@@ -52,15 +52,16 @@ func (e EightBall) ProcessMessage(
 		ChannelID: m.ChannelID,
 		Message:   eightBallMessages[rand.Intn(len(eightBallMessages))],
 	}
+
 	return nil
 }
 
-// CommandList returns the invocable aliases for the 8 Ball Command
+// CommandList returns the invocable aliases for the 8 Ball Command.
 func (e EightBall) CommandList() []string {
 	return []string{"8", "8ball"}
 }
 
-// Help gives help information for the 8 Ball Command
+// Help gives help information for the 8 Ball Command.
 func (e EightBall) Help() string {
 	return "Provides an answer to a yes/no question"
 }

@@ -27,9 +27,11 @@ func main() {
 		os.Getenv("DATABASE_NAME")))
 	if dbErr != nil {
 		log.Fatal(dbErr)
+
 		return
 	}
 	defer dbPool.Close()
+
 	ticker := app.Timers{
 		Daily:           time.NewTicker(time.Hour * 24),
 		Hourly:          time.NewTicker(time.Hour),
@@ -40,19 +42,24 @@ func main() {
 		HalfHourly:      time.NewTicker(time.Minute * 30),
 		QuarterToHourly: time.NewTicker(time.Minute * 45),
 	}
+
 	defer ticker.StopAll()
 	session, err := app.Start(os.Getenv("DISCORD_SECRET"), dbPool, &ticker)
+
 	defer func() {
 		// If a session is established, close it properly before exiting
 		if session != nil {
 			if sessionErr := session.Close(); sessionErr != nil {
 				log.Fatal(sessionErr)
+
 				return
 			}
 		}
 	}()
+
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
+
 		return
 	}
 

@@ -1,7 +1,7 @@
 package commands
 
-// MessageResponse contains information to respond to a command
-// Idiomatic usage is to send for each message/reaction, and not to cache
+// MessageResponse contains information to respond to a command.
+// Idiomatic usage is to send for each message/reaction, and not to cache.
 type MessageResponse struct {
 	// Reaction contains a reaction to add or remove (or both)
 	// It is intentionally singular
@@ -12,7 +12,7 @@ type MessageResponse struct {
 	ChannelID string
 }
 
-// ReactionResponse contains information to add or remove reactions
+// ReactionResponse contains information to add or remove reactions.
 type ReactionResponse struct {
 	Add       string
 	Remove    string

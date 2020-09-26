@@ -1,30 +1,47 @@
 #!/usr/bin/env sh
 set -euo
 echo "Checking"
-go fmt .
-go vet .
-if command -v golint >/dev/null; then
-	echo "Found golint, linting"
-	find . -regex ".*\.go" -exec golint {} \;
-else
-	echo "Warning, couldn't find golint, skipping" >&2
+go fmt
+if command -v gofumpt >/dev/null; then
+	gofumpt -s -w .
 fi
-if command -v gosec >/dev/null; then
-	echo "Found gosec, checking for security issues..."
-	gosec ./...
+if command -v golangci-lint >/dev/null; then
+	golangci-lint run \
+		-E bodyclose \
+		-E noctx \
+		-E golint \
+		-E rowserrcheck \
+		-E gosec \
+		-E unconvert \
+		-E dupl \
+		-E asciicheck \
+		-E gofmt \
+		-E gofumpt \
+		-E goimports \
+		-E goheader \
+		-E maligned \
+		-E misspell \
+		-E lll \
+		-E unparam \
+		-E dogsled \
+		-E nakedret \
+		-E prealloc \
+		-E gocritic \
+		-E gochecknoinits \
+		-E funlen \
+		-E goprintffuncname \
+		-E goerr113 \
+		-E godot \
+		-E testpackage \
+		-E nestif \
+		-E exportloopref \
+		-E exhaustive \
+		-E sqlclosecheck \
+		-E nlreturn \
+		-E nolintlint
+	echo "Finished linting, no issues!"
+	exit 0
 else
-	echo "Warning, couldn't find gosec, skipping" >&2
+	echo "Failed to lint" >&2
+	exit 1
 fi
-if command -v errcheck >/dev/null; then
-	echo "Found errcheck, checking for ignored errors..."
-	errcheck ./...
-else
-	echo "Warning, couldn't find errcheck, not running" >&2
-fi
-if command -v staticcheck >/dev/null; then
-	echo "Found staticheck, performing static analysis..."
-	staticcheck ./...
-else
-	echo "Warning, coudln't find staticcheck, not running" >&2
-fi
-echo "Finished linting, no issues!"

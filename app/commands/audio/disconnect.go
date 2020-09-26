@@ -5,10 +5,10 @@ import (
 	"quozlet.net/birbbot/app/commands"
 )
 
-// Disconnect clears the queue and leaves the voice channel
+// Disconnect clears the queue and leaves the voice channel.
 type Disconnect struct{}
 
-// ProcessMessage enqueues a Disconnect VoiceCommand
+// ProcessMessage enqueues a Disconnect VoiceCommand.
 func (d Disconnect) ProcessMessage(
 	response chan<- commands.MessageResponse,
 	voiceCommandChannel chan<- VoiceCommand,
@@ -25,15 +25,16 @@ func (d Disconnect) ProcessMessage(
 		},
 	}
 	voiceCommandChannel <- Leave
+
 	return nil, nil
 }
 
-// CommandList returns the list of aliases for the Disconnect Command
+// CommandList returns the list of aliases for the Disconnect Command.
 func (d Disconnect) CommandList() []string {
 	return []string{"disconnect", "dc"}
 }
 
-// Help returns the help string for the Disconnect Command
+// Help returns the help string for the Disconnect Command.
 func (d Disconnect) Help() string {
 	return "`disconnect`/`dc` enqueues a disconnect, which will run after the currently playing track, if there is any"
 }
