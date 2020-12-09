@@ -216,6 +216,8 @@ func findUniqueURLs(
 					item.Description,
 				))
 			urls[item.Description] = struct{}{}
+
+			break
 		}
 	}
 
